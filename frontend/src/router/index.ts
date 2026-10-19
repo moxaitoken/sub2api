@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { supplierRoutes } from '@/features/supplier/routes'
 
 /**
  * Route definitions with lazy loading
@@ -716,6 +717,7 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ==================== 404 Not Found ====================
+  ...supplierRoutes,
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',

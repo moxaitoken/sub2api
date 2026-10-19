@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
+	"github.com/Wei-Shaw/sub2api/internal/supplier"
 )
 
 // AdminHandlers contains all admin-related HTTP handlers
@@ -68,6 +69,8 @@ type Handlers struct {
 	ModelPlaza       *ModelPlazaHandler
 	AsyncImage       *AsyncImageHandler
 	BatchImage       *BatchImageHandler
+	// Supplier is the fork-local supplier module (internal/supplier).
+	Supplier *supplier.Handler
 }
 
 // BuildInfo contains build-time information
