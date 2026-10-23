@@ -9,6 +9,18 @@ const ok=(data:unknown)=>new Response(JSON.stringify({code:0,data}),{status:200}
 const view=(transport:typeof fetch,administrator=false)=>mount(PortalLoginView,{props:{client:new SupplierClient(()=>undefined,transport,administrator?'admin':'supplier'),administrator},global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
 afterEach(()=>vi.restoreAllMocks())
 describe('R2 login forms',()=>{
+ it.each(['zh','en'])('does not offer administrator sign-in on the supplier form (%s)',(locale)=>{
+  const w=mount(PortalLoginView,{props:{client:new SupplierClient(()=>undefined,vi.fn()),administrator:false},global:{plugins:[createI18n({legacy:false,locale,messages:{zh,en}})]}})
+  expect(w.find('a[href="/?portal=admin"]').exists()).toBe(false)
+  expect(w.find('#login-account').exists()).toBe(true)
+  expect(w.find('#login-password').exists()).toBe(true)
+  w.unmount()
+ })
+ it('keeps the return-to-supplier link on the administrator form',()=>{
+  const w=view(vi.fn(),true)
+  expect(w.get('a[href="/?portal=supplier"]').text()).toBe(en.portal.supplierLogin)
+  w.unmount()
+ })
  it('submits a non-email local account and immediately clears the password',async()=>{
   let resolve:(r:Response)=>void=()=>undefined;const f=vi.fn<typeof fetch>().mockReturnValue(new Promise<Response>(r=>{resolve=r}));const w=view(f)
   await w.get('#login-account').setValue('vendor_01');await w.get('#login-password').setValue('FixturePassword!2026');await w.get('form').trigger('submit')

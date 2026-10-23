@@ -43,6 +43,6 @@ async function submit() {
       </template>
       <button class="primary wide" :disabled="busy">{{ t(busy ? 'auth.submitting' : challenge ? 'auth.verify' : 'auth.login') }}</button>
     </form>
-    <a :href="administrator ? '/?portal=supplier' : '/?portal=admin'">{{ t(administrator ? 'portal.supplierLogin' : 'portal.adminLogin') }}</a>
+    <a v-if="administrator" href="/?portal=supplier">{{ t('portal.supplierLogin') }}</a>
   </section>
 </template>
