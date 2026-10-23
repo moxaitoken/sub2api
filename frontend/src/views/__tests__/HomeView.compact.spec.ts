@@ -87,6 +87,25 @@ describe('HomeView compact mode', () => {
     expect(wrapper.find('[data-testid="compact-home"]').exists()).toBe(false)
   })
 
+  it.each(['', 'https://docs.example.invalid/guide'])(
+    'hides the default homepage GitHub entry while preserving copyright and docs (%s)',
+    (docUrl) => {
+      const wrapper = mountHome({ doc_url: docUrl })
+      const footer = wrapper.get('footer')
+
+      expect(footer.text()).not.toContain('GitHub')
+      expect(footer.find('a[href*="github.com"]').exists()).toBe(false)
+      expect(footer.text()).toContain(`© ${new Date().getFullYear()} Test site.`)
+      expect(footer.text()).toContain('home.footer.allRightsReserved')
+      expect(footer.findAll('a')).toHaveLength(docUrl ? 1 : 0)
+      if (docUrl) {
+        expect(footer.get('a').attributes('href')).toBe(docUrl)
+        expect(footer.get('a').attributes('rel')).toBe('noopener noreferrer')
+      }
+      wrapper.unmount()
+    },
+  )
+
   it('renders custom URL content ahead of compact mode', () => {
     const wrapper = mountHome({
       compact_home_enabled: true,
