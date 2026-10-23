@@ -8,13 +8,14 @@
 
 ## 1. 一句话方案
 
-**一个独立 Go 模块服务＋一个 Vue 工程＋一个模块数据库，复用现有表和 Sub2API 管理 API。** 后台同步、代理检测与授权任务先在该服务内运行；模型调用仍直接走 Sub2API，不经过供应商服务。
+**一个独立 Go 模块服务＋供应商 Vue 门户＋主站管理员页面＋一个模块数据库，复用现有表和 Sub2API 管理 API。** 后台同步、代理检测与授权任务先在该服务内运行；模型调用仍直接走 Sub2API，不经过供应商服务。
 
 ```mermaid
 flowchart LR
-    V[供应商] --> UI[同一Vue工程：供应商端 / 平台管理端]
-    A[平台管理员] --> UI
-    UI --> B[供应商Go服务：API及后台任务]
+    V[供应商] --> UI[供应商Vue门户]
+    A[平台管理员] --> MAIN[Sub2API主站管理页面]
+    MAIN -->|同源API及主站Bearer身份| B[供应商Go服务：API及后台任务]
+    UI --> B
     B --> D[(sub2api_supplier)]
     B --> AD[固定HTTP适配器]
     AD --> S[现有Sub2API]
@@ -23,7 +24,7 @@ flowchart LR
     S --> M[Claude]
 ```
 
-主站与模块可以共ECS、共PG实例，但数据库、账号、迁移与密钥分开。无需新增云数据库实例、Redis、MQ、独立任务服务或计费微服务。不改主站Ent、不直写主库，不复制Sub2API或React原型。自研内容仍放在 `extensions/supplier/`，上游差异集中于 `adapters/sub2api`。
+主站与模块可以共ECS、共PG实例，但数据库、账号、迁移与密钥分开。无需新增云数据库实例、Redis、MQ、独立任务服务或计费微服务。不改主站Ent、不直写主库，不复制Sub2API或React原型。供应商后端及门户仍放在 `extensions/supplier/`；管理员页面在主站前端独立目录接入，仅导航、路由、翻译及开发代理存在主站集成改动。上游 HTTP 差异集中于 `adapters/sub2api`。
 
 ## 2. 功能与身份
 
@@ -63,7 +64,7 @@ OAuth绑定供应商、操作者、代理版本、允许分组、state/PKCE和�
 
 ### 4.2 用量
 
-复用usage_records与sync_cursors，按供应商的全部账号同步脱敏事件。一个接口按今天/近7天/近30天和全部/单账号，在相同过滤与数据快照下返回四卡、日趋势和账号汇总。账号池概览、实时指标及账号详情另按PRD口径读取，不以当前页求和。
+复用usage_records与sync_cursors，后台按供应商全部账号逐日分页同步脱敏事件，持久进度、租约、失败重试及双遍摘要对账；历史日周期复核。一个接口按今天/近7天/近30天/全部历史和全部/单账号，在同一数据快照下返回四卡、日趋势和账号汇总；来源缺口明确显示不完整。账号池概览、实时指标及账号详情另按PRD口径读取，不以当前页求和。
 
 官方价、用户扣款、采购应付三者不混用。全部调用尝试与成功计费日志不同；Fable、独立权重、实时并发或尝试数据无法从现有API可靠取得时显示未知并列出能力缺口，不能造数据或用priority替代权重。
 
@@ -104,3 +105,7 @@ OAuth绑定供应商、操作者、代理版本、允许分组、state/PKCE和�
 - `extensions/supplier/backend/internal/repository/migrations.go`：显式迁移、历史checksum及未知版本拒绝。
 
 现有S1/S2是旧契约下的局部实现，见 [S1记录](s1-implementation-results.md)、[S2记录](s2-implementation.md)。原型是React内存演示，不是可直接上线的Vue代码。R2只简化工程方案，不改变这些事实。
+
+## 主站管理员入口集成
+
+主站管理页面、同源 Bearer 鉴权与兼容边界见 [主站管理接入设计](main-admin-integration.md)。

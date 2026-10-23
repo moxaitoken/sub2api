@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import type { SupplierClient } from '../api/client'
 import type { OwnProxy } from '../api/types'
 import PortalIcon from '../components/PortalIcon.vue'
@@ -8,7 +8,7 @@ import PortalDialog from '../components/PortalDialog.vue'
 import ProxyCreateForm from '../components/ProxyCreateForm.vue'
 import RequestError from '../components/RequestError.vue'
 const props = defineProps<{ client: SupplierClient }>()
-const { t } = useI18n()
+const { t } = useSupplierI18n()
 const rows = ref<OwnProxy[]>([]), loading = ref(false), error = ref<unknown>(null), add = ref(false), busy = ref(false)
 const removing = ref<OwnProxy | null>(null), deleteError = ref<unknown>(null)
 function requestDelete(proxy: OwnProxy) { removing.value = proxy; deleteError.value = null }

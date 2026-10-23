@@ -210,3 +210,30 @@ describe('subscription route guard (opt-out flag)', () => {
     expect(next).toHaveBeenCalledWith('/admin/dashboard')
   })
 })
+
+
+describe('supplier administrator routes use the actual main guard', () => {
+  it.each(['/admin/suppliers', '/admin/supplier-finance', '/admin/suppliers/:id/:tab(accounts|proxies|usage)'])('rejects direct user access to %s and permits administrators', async (path) => {
+    const { supplierAdminRoutes } = await import('@/views/admin/supplier/routes')
+    const route = supplierAdminRoutes.find(item => item.path === path)!
+    expect(route.meta?.requiresAuth).toBe(true)
+    expect(route.meta?.requiresAdmin).toBe(true)
+    appStore.backendModeEnabled = false
+    appStore.publicSettingsLoaded = true
+    authStore.isAuthenticated = true
+    authStore.isAdmin = false
+    let attempt = runGuard(route.meta!, path)
+    await attempt.navigation
+    expect(attempt.next).toHaveBeenCalledWith('/dashboard')
+    authStore.isAdmin = true
+    attempt = runGuard(route.meta!, path)
+    await attempt.navigation
+    expect(attempt.next).toHaveBeenCalledWith()
+    authStore.isAuthenticated = false
+    attempt = runGuard(route.meta!, path)
+    await attempt.navigation
+    expect(attempt.next).toHaveBeenCalledWith(expect.objectContaining({ path: '/login' }))
+    authStore.isAuthenticated = true
+    authStore.isAdmin = false
+  })
+})

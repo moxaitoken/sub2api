@@ -21,6 +21,7 @@ import (
 	"github.com/moxaitoken/sub2api-supplier/internal/accounts"
 	"github.com/moxaitoken/sub2api-supplier/internal/adapters/sub2api"
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
+	"github.com/moxaitoken/sub2api-supplier/internal/finance"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 	"github.com/moxaitoken/sub2api-supplier/internal/repository"
 	"github.com/moxaitoken/sub2api-supplier/internal/server"
@@ -128,7 +129,7 @@ func run() error {
 			accountService.ApprovedGroups = append(accountService.ApprovedGroups, id)
 		}
 	}
-	handler, err := server.New(svc, server.Config{Origin: os.Getenv("SUPPLIER_PUBLIC_ORIGIN"), InsecureLocalhost: os.Getenv("SUPPLIER_INSECURE_LOCALHOST") == "true", TrustedProxies: prefixes, StaticDir: os.Getenv("SUPPLIER_STATIC_DIR"), Accounts: accountService, Usage: usageService, Suppliers: supplierService, Admin: adminService})
+	handler, err := server.New(svc, server.Config{Origin: os.Getenv("SUPPLIER_PUBLIC_ORIGIN"), AdminOrigin: os.Getenv("SUPPLIER_ADMIN_ORIGIN"), InsecureLocalhost: os.Getenv("SUPPLIER_INSECURE_LOCALHOST") == "true", TrustedProxies: prefixes, StaticDir: os.Getenv("SUPPLIER_STATIC_DIR"), Finance: &finance.Service{Store: store, Vault: vault}, Accounts: accountService, Usage: usageService, Suppliers: supplierService, Admin: adminService})
 	if err != nil {
 		return err
 	}
@@ -140,8 +141,20 @@ func run() error {
 	stopped := make(chan os.Signal, 1)
 	signal.Notify(stopped, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(stopped)
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		if usageService.Source != nil {
+			if err := usageService.Run(workerCtx); err != nil {
+				log.Print("supplier usage worker stopped")
+			}
+		}
+	}()
 	go func() {
 		<-stopped
+		stopWorker()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
@@ -150,5 +163,7 @@ func run() error {
 	if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("supplier HTTP server failed")
 	}
+	stopWorker()
+	<-workerDone
 	return nil
 }

@@ -25,19 +25,21 @@ func (s *Server) registerIdentityRoutes(mux *http.ServeMux) {
 		admin.cookieName = "supplier_admin"
 		admin.challengeName = "supplier_admin_challenge"
 	}
+	admin.registerFinance(mux)
+	admin.registerAdminResources(mux)
 	mux.HandleFunc("POST /api/supplier/admin/v1/auth/login", admin.login)
 	mux.HandleFunc("POST /api/supplier/admin/v1/auth/login/2fa", admin.twoFA)
 	mux.HandleFunc("POST /api/supplier/admin/v1/auth/logout", admin.logout)
-	mux.HandleFunc("GET /api/supplier/admin/v1/me", admin.authorize(false, func(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
+	mux.HandleFunc("GET /api/supplier/admin/v1/me", admin.authorizeAdmin(false, func(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
 		admin.reply(w, 200, map[string]any{"principal": map[string]string{"kind": "admin", "id": strconv.FormatInt(p.Me.User.ID, 10), "email": p.Me.User.Email}, "csrf_token": p.Me.CSRFToken})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers", admin.authorize(false, admin.managedSuppliers))
-	mux.HandleFunc("POST /api/supplier/admin/v1/suppliers", admin.authorize(true, admin.createSupplier))
-	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers/{id}", admin.authorize(false, admin.managedSupplier))
-	mux.HandleFunc("PUT /api/supplier/admin/v1/suppliers/{id}/status", admin.authorize(true, admin.supplierChange(false)))
-	mux.HandleFunc("POST /api/supplier/admin/v1/suppliers/{id}/credential-reset", admin.authorize(true, admin.supplierChange(true)))
-	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers/{id}/accounts", admin.authorize(false, func(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
+	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers", admin.authorizeAdmin(false, admin.managedSuppliers))
+	mux.HandleFunc("POST /api/supplier/admin/v1/suppliers", admin.authorizeAdmin(true, admin.createSupplier))
+	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers/{id}", admin.authorizeAdmin(false, admin.managedSupplier))
+	mux.HandleFunc("PUT /api/supplier/admin/v1/suppliers/{id}/status", admin.authorizeAdmin(true, admin.supplierChange(false)))
+	mux.HandleFunc("POST /api/supplier/admin/v1/suppliers/{id}/credential-reset", admin.authorizeAdmin(true, admin.supplierChange(true)))
+	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers/{id}/accounts", admin.authorizeAdmin(false, func(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
 		id := r.PathValue("id")
 		if !uuid.MatchString(id) {
 			return ports.ErrNotFound

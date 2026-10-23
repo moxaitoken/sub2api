@@ -64,7 +64,7 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 	published := false
 	defer func() {
 		if !published {
-			cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer cancel()
 			_ = store.CancelOnboarding(cleanup, o.SupplierID, o.ID)
 		}
@@ -135,7 +135,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	knownFailure := false
 	defer func() {
 		if !done {
-			cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer cancel()
 			state := "needs_attention"
 			if knownFailure {

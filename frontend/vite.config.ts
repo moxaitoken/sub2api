@@ -92,6 +92,7 @@ export default defineConfig(({ mode }) => {
       injectPublicSettings(backendUrl)
     ],
   resolve: {
+      dedupe: ['vue', 'vue-i18n'],
     alias: {
       '@': resolve(__dirname, 'src'),
       // 使用 vue-i18n 运行时版本，避免 CSP unsafe-eval 问题
@@ -158,6 +159,10 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: devPort,
       proxy: {
+        '/api/supplier/admin/v1': {
+          target: env.VITE_DEV_SUPPLIER_TARGET || 'http://127.0.0.1:5174',
+          changeOrigin: false
+        },
         '/api': {
           target: backendUrl,
           changeOrigin: true

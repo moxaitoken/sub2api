@@ -6,7 +6,10 @@ import (
 )
 
 func (s *Server) registerUsage(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/supplier/v1/usage", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	s.registerResourceUsage(mux, "/api/supplier/v1", s.localAuthorize)
+}
+func (s *Server) registerResourceUsage(mux *http.ServeMux, prefix string, authorize resourceAuthorizer) {
+	mux.HandleFunc("GET "+prefix+"/usage", authorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if s.cfg.Usage == nil {
 			return ports.ErrUnavailable
 		}
@@ -20,7 +23,7 @@ func (s *Server) registerUsage(mux *http.ServeMux) {
 		if period == "" {
 			period = "today"
 		}
-		if period != "today" && period != "7d" && period != "30d" {
+		if period != "today" && period != "7d" && period != "30d" && period != "all" {
 			return problem(400, "INVALID_REQUEST")
 		}
 		id := r.URL.Query().Get("account_id")

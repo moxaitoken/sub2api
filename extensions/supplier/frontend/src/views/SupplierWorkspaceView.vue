@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import type { SupplierAccount } from '../api/types'
 import PortalIcon from '../components/PortalIcon.vue'
 import PortalDialog from '../components/PortalDialog.vue'
@@ -8,7 +8,7 @@ import UsageStatsView from './UsageStatsView.vue'
 import type { SupplierClient } from '../api/client'
 const props = defineProps<{ client?: SupplierClient; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; updatedAt: string; failed: boolean }>()
 const emit = defineEmits<{ refresh: [page?: number]; add: [] }>()
-const { t, locale } = useI18n()
+const { t, locale } = useSupplierI18n()
 const search = ref(''), state = ref(''), supply = ref(''), overview = ref(true), columnsOpen = ref(false)
 const details = ref<SupplierAccount | null>(null), scopeOpen = ref(false)
 const columns = ['name', 'state', 'supply', 'quota', 'concurrency', 'weight', 'today', 'cumulative', 'observed', 'actions'] as const

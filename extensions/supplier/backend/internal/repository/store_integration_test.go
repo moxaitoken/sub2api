@@ -111,7 +111,7 @@ func TestPostgresStore(t *testing.T) {
 			t.Fatal(err)
 		}
 		var count int
-		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != 7 {
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != 9 {
 			t.Fatalf("migration count %d: %v", count, err)
 		}
 		if _, err = db.ExecContext(ctx, `UPDATE supplier.schema_migrations SET checksum=repeat('0',64) WHERE version='002_session_binding.sql'`); err != nil {
@@ -450,7 +450,7 @@ func TestPostgresStore(t *testing.T) {
 					t.Fatal(err)
 				}
 				if scenario == "one_owner" {
-					if !revoked || migrations != 7 {
+					if !revoked || migrations != 9 {
 						t.Fatal("retired ops session or migration state", revoked, migrations)
 					}
 					if _, err := db.ExecContext(ctx, `UPDATE supplier.supplier_sessions SET revoked_at=NULL WHERE id=$1`, opsID); !errors.Is(mapError(err), ports.ErrConflict) {

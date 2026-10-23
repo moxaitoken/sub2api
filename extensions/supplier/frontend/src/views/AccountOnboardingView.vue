@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import { ApiError, type SupplierClient } from '../api/client'
 import type { AccountOperation, Authorization, OnboardingOptions, OwnProxy } from '../api/types'
 import PortalDialog from '../components/PortalDialog.vue'
@@ -8,7 +8,7 @@ import ProxyCreateForm from '../components/ProxyCreateForm.vue'
 import RequestError from '../components/RequestError.vue'
 const props = defineProps<{ client: SupplierClient }>()
 const emit = defineEmits<{ close: []; created: [] }>()
-const { t } = useI18n()
+const { t } = useSupplierI18n()
 const options = ref<OnboardingOptions>({ groups: [], proxies: [] }), loading = ref(true), busy = ref(false), error = ref<unknown>(null)
 const name = ref(''), group = ref(0), source = ref('existing'), proxyID = ref(''), code = ref(''), advanced = ref(false)
 const authorization = ref<Authorization | null>(null), operation = ref<AccountOperation | null>(null), submitted = ref(false)

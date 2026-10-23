@@ -1,3 +1,5 @@
+import supplierPortal from '../../../../../extensions/supplier/frontend/src/i18n/locales/en'
+import supplierAdmin from './supplierAdmin'
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -7,6 +9,8 @@ import admin from './admin'
 import misc from './misc'
 
 export default {
+  supplierPortal,
+  supplierAdmin,
   ...landing,
   ...common,
   ...dashboard,

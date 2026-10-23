@@ -58,7 +58,7 @@ export interface ProxyInput { name: string; address: string; region: string }
 export interface AccountGroup { id: number; name: string; platform: string; status: string }
 export interface OnboardingOptions { groups: AccountGroup[]; proxies: OwnProxy[] }
 
-export type UsagePeriod = 'today' | '7d' | '30d'
+export type UsagePeriod = 'today' | '7d' | '30d' | 'all'
 export interface UsageMetrics {
   record_count: string; input_tokens: string; output_tokens: string
   cache_read_tokens: string; cache_creation_tokens: string

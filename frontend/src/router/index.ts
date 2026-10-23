@@ -13,11 +13,13 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { supplierAdminRoutes } from '@/views/admin/supplier/routes'
 
 /**
  * Route definitions with lazy loading
  */
 const routes: RouteRecordRaw[] = [
+  ...supplierAdminRoutes,
   // ==================== Setup Routes ====================
   {
     path: '/setup',

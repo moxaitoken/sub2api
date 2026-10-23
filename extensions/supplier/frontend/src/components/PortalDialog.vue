@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import PortalIcon from './PortalIcon.vue'
 defineProps<{ title: string; footer?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
-const { t } = useI18n()
+const { t } = useSupplierI18n()
 const element = ref<HTMLElement | null>(null)
 let previous: HTMLElement | null = null
 function keydown(event: KeyboardEvent) {

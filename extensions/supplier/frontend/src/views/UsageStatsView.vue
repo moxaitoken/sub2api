@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import type { SupplierClient } from '../api/client'
 import type { UsageAccount, UsagePeriod, UsageReport } from '../api/types'
 import RequestError from '../components/RequestError.vue'
 import PortalIcon from '../components/PortalIcon.vue'
 
 const props = defineProps<{ client: SupplierClient }>()
-const { t, locale } = useI18n()
+const { t, locale } = useSupplierI18n()
 const period = ref<UsagePeriod>('today'), account = ref(''), page = ref(1)
 const report = ref<UsageReport | null>(null), options = ref<UsageAccount[]>([])
 const busy = ref(false), error = ref<unknown>(null)
@@ -44,7 +44,7 @@ onBeforeUnmount(() => { generation++ })
     <div class="workspace-heading"><div><h1>{{ t('portal.usage') }}</h1><p>{{ t('workspace.usageDescription') }}</p></div><button :disabled="busy" @click="load(page)"><PortalIcon name="refresh" />{{ t('app.refresh') }}</button></div>
     <div class="usage-filters">
       <label>{{ t('workspace.account') }}<select v-model="account" aria-label="account" @change="load()"><option value="">{{ t('workspace.allAccounts') }}</option><option v-for="a in options" :key="a.id" :value="a.id">{{ a.name }}{{ a.archived ? ` (${t('usage.archived')})` : '' }}</option></select></label>
-      <label>{{ t('workspace.timeRange') }}<select v-model="period" aria-label="period" @change="load()"><option value="today">{{ t('workspace.today') }}</option><option value="7d">{{ t('usage.sevenDays') }}</option><option value="30d">{{ t('usage.thirtyDays') }}</option></select></label>
+      <label>{{ t('workspace.timeRange') }}<select v-model="period" aria-label="period" @change="load()"><option value="all">{{ t('usage.allHistory') }}</option><option value="today">{{ t('workspace.today') }}</option><option value="7d">{{ t('usage.sevenDays') }}</option><option value="30d">{{ t('usage.thirtyDays') }}</option></select></label>
       <span>Asia/Shanghai</span>
     </div>
     <RequestError :error="error" />

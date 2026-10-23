@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import { ApiError } from '../api/client'
 import { errorKey } from '../api/errorText'
 defineProps<{ error: unknown }>()
-const { t } = useI18n()
+const { t } = useSupplierI18n()
 </script>
 
 <template>

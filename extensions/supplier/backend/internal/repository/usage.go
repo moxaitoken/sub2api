@@ -18,7 +18,7 @@ func (s *Store) UsageAccounts(ctx context.Context, supplier string) ([]ports.Usa
 	rows, err := s.db.QueryContext(ctx, `SELECT a.id::text,a.name,a.deleted_at IS NOT NULL OR a.admission_state='deleted',a.upstream_account_id
 	 FROM supplier.supplier_accounts a JOIN supplier.suppliers s ON s.id=a.supplier_id
 	 WHERE a.supplier_id=$1 AND a.upstream_instance_id=$2 AND a.upstream_account_id>0 AND s.portal_status='active'
-	 ORDER BY (SELECT max(c.last_scan_at) FROM supplier.supplier_sync_cursors c WHERE c.account_id=a.id) NULLS FIRST,a.id LIMIT 1001`, supplier, s.instanceID)
+	 ORDER BY (SELECT max(c.last_scan_at) FROM supplier.supplier_sync_cursors c WHERE c.account_id=a.id) NULLS FIRST,a.id`, supplier, s.instanceID)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -30,9 +30,6 @@ func (s *Store) UsageAccounts(ctx context.Context, supplier string) ([]ports.Usa
 			return nil, err
 		}
 		out = append(out, a)
-	}
-	if len(out) > 1000 {
-		return nil, ports.ErrUnavailable
 	}
 	return out, rows.Err()
 }
@@ -132,7 +129,7 @@ func (s *Store) UsageReport(ctx context.Context, supplier string, q ports.UsageQ
 	if !active {
 		return out, ports.ErrForbidden
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id::text,name,deleted_at IS NOT NULL OR admission_state='deleted' FROM supplier.supplier_accounts WHERE supplier_id=$1 AND upstream_instance_id=$2 AND upstream_account_id>0 ORDER BY name,id LIMIT 1001`, supplier, s.instanceID)
+	rows, err := tx.QueryContext(ctx, `SELECT id::text,name,deleted_at IS NOT NULL OR admission_state='deleted' FROM supplier.supplier_accounts WHERE supplier_id=$1 AND upstream_instance_id=$2 AND upstream_account_id>0 ORDER BY name,id`, supplier, s.instanceID)
 	if err != nil {
 		return out, err
 	}
@@ -153,11 +150,25 @@ func (s *Store) UsageReport(ctx context.Context, supplier string, q ports.UsageQ
 	if err != nil {
 		return out, err
 	}
-	if len(out.Options) > 1000 {
-		return out, ports.ErrUnavailable
-	}
 	if !owned {
 		return out, ports.ErrNotFound
+	}
+	if q.Period == "all" {
+		// Resolve history bounds inside the SAME snapshot as all aggregates.
+		var date sql.NullString
+		err = tx.QueryRowContext(ctx, `SELECT LEAST(min(usage_history_start),(SELECT min((u.occurred_at AT TIME ZONE 'Asia/Shanghai')::date)
+		 FROM supplier.supplier_usage_records u WHERE u.supplier_id=$1 AND u.upstream_instance_id=$2 AND ($3='' OR u.account_id::text=$3)))::text
+		 FROM supplier.supplier_accounts WHERE supplier_id=$1 AND upstream_instance_id=$2 AND upstream_account_id>0 AND ($3='' OR id::text=$3)`, supplier, s.instanceID, q.AccountID).Scan(&date)
+		if err != nil {
+			return out, err
+		}
+		if date.Valid {
+			start, err = time.ParseInLocation("2006-01-02", date.String, start.Location())
+			if err != nil {
+				return out, err
+			}
+			out.Start = start
+		}
 	}
 	args := []any{supplier, s.instanceID, start, end, q.AccountID}
 	filter := ` FROM supplier.supplier_usage_records u WHERE u.supplier_id=$1 AND u.upstream_instance_id=$2 AND u.occurred_at >= $3 AND u.occurred_at < $4 AND ($5='' OR u.account_id::text=$5)`
@@ -192,7 +203,9 @@ func (s *Store) UsageReport(ctx context.Context, supplier string, q ports.UsageQ
 		out.Daily = append(out.Daily, ports.UsageDay{Date: date, UsageMetrics: m})
 	}
 	rows, err = tx.QueryContext(ctx, `SELECT a.id::text,a.name,a.deleted_at IS NOT NULL OR a.admission_state='deleted',`+usageSums+`,
-	 (SELECT CASE WHEN count(*)=$6 AND bool_and(c.status='reconciled' AND c.last_scan_at>now()-interval '90 seconds') THEN 'complete' ELSE 'partial' END FROM supplier.supplier_sync_cursors c WHERE c.account_id=a.id AND c.supplier_id=$1 AND c.upstream_instance_id=$2 AND c.usage_date >= $7::date AND c.usage_date < $8::date),
+	 (SELECT CASE WHEN a.usage_discovered_at IS NOT NULL AND count(*)=LEAST($6::integer,$8::date-GREATEST($7::date,COALESCE(a.usage_history_start,$7::date)))
+	 AND bool_and(c.status='reconciled' AND c.last_scan_at>now()-CASE WHEN c.usage_date >= (now() AT TIME ZONE 'Asia/Shanghai')::date-1 THEN interval '90 seconds' ELSE interval '48 hours' END)
+	 THEN 'complete' ELSE 'partial' END FROM supplier.supplier_sync_cursors c WHERE c.account_id=a.id AND c.supplier_id=$1 AND c.upstream_instance_id=$2 AND c.usage_date >= GREATEST($7::date,COALESCE(a.usage_history_start,$7::date)) AND c.usage_date < $8::date),
 	 (SELECT min(c.last_scan_at) FROM supplier.supplier_sync_cursors c WHERE c.account_id=a.id AND c.supplier_id=$1 AND c.upstream_instance_id=$2 AND c.usage_date >= $7::date AND c.usage_date < $8::date)
 	 FROM supplier.supplier_accounts a LEFT JOIN supplier.supplier_usage_records u ON u.account_id=a.id AND u.supplier_id=$1 AND u.upstream_instance_id=$2 AND u.occurred_at >= $3 AND u.occurred_at < $4
 	 WHERE a.supplier_id=$1 AND a.upstream_instance_id=$2 AND a.upstream_account_id>0 AND ($5='' OR a.id::text=$5)

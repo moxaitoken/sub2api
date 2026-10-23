@@ -1,5 +1,5 @@
 export default {
-  usage: {"sevenDays": "近 7 天", "thirtyDays": "近 30 天", "archived": "已归档", "partial": "当前统计不完整：部分账号同步失败、超出单次同步上限或源数据存在缺口。下方保留已获取的数据，请稍后刷新或选择单个账号。", "observed": "查询于", "costScope": "按主站记录的标准价格消耗统计，不代表供应商结算金额。", "attemptsUnknown": "全部请求尝试数尚无可靠数据源", "records": "用量记录数", "recordScope": "统计已落库用量记录；失败及重试尝试可能不在其中。", "inputOutput": "输入 / 输出", "readWrite": "读取 / 写入", "trend": "消耗趋势", "sync": "同步状态", "complete": "已同步", "empty": "当前范围内暂无已接入账号", "totalAccounts": "共 {total} 个账号"},
+  usage: {"allHistory": "全部历史", "sevenDays": "近 7 天", "thirtyDays": "近 30 天", "archived": "已归档", "partial": "当前统计尚未完成对账：后台正在补齐、重试或核对来源缺口。已获取的数据会保留，稍后刷新可查看进度。", "observed": "查询于", "costScope": "按主站记录的标准价格消耗统计，不代表供应商结算金额。", "attemptsUnknown": "全部请求尝试数尚无可靠数据源", "records": "用量记录数", "recordScope": "统计已落库用量记录；失败及重试尝试可能不在其中。", "inputOutput": "输入 / 输出", "readWrite": "读取 / 写入", "trend": "消耗趋势", "sync": "同步状态", "complete": "已同步", "empty": "当前范围内暂无已接入账号", "totalAccounts": "共 {total} 个账号"},
   onboarding: {
     "deleteProxy": "删除",
     "confirmDeleteProxy": "确认删除",

@@ -18,13 +18,16 @@ import (
 
 	"github.com/moxaitoken/sub2api-supplier/internal/accounts"
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
+	"github.com/moxaitoken/sub2api-supplier/internal/finance"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 	"github.com/moxaitoken/sub2api-supplier/internal/suppliers"
 	"github.com/moxaitoken/sub2api-supplier/internal/usage"
 )
 
 type Config struct {
+	Finance           *finance.Service
 	Origin            string
+	AdminOrigin       string
 	InsecureLocalhost bool
 	TrustedProxies    []netip.Prefix
 	StaticDir         string
@@ -56,6 +59,13 @@ func New(service *auth.Service, cfg Config) (http.Handler, error) {
 	}
 	if u.Scheme != "https" && !(cfg.InsecureLocalhost && u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost" || u.Hostname() == "::1")) {
 		return nil, fmt.Errorf("HTTPS origin required outside explicit localhost mode")
+	}
+	if cfg.AdminOrigin != "" {
+		a, err := url.Parse(cfg.AdminOrigin)
+		if err != nil || a.Host == "" || a.User != nil || cfg.AdminOrigin != a.Scheme+"://"+a.Host ||
+			(a.Scheme != "https" && !(cfg.InsecureLocalhost && a.Scheme == "http" && (a.Hostname() == "127.0.0.1" || a.Hostname() == "localhost" || a.Hostname() == "::1"))) {
+			return nil, fmt.Errorf("valid main admin origin required")
+		}
 	}
 	s := &Server{service: service, cfg: cfg, cookieName: "__Host-supplier_session", challengeName: "__Host-supplier_challenge", attempts: make(map[string]bucket)}
 	if cfg.InsecureLocalhost {
@@ -100,7 +110,9 @@ func New(service *auth.Service, cfg Config) (http.Handler, error) {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-		if r.Method != "GET" && r.Method != "HEAD" && r.Header.Get("Origin") != cfg.Origin {
+		mainAdmin := cfg.AdminOrigin != "" && strings.HasPrefix(r.URL.Path, "/api/supplier/admin/v1/") &&
+			!strings.Contains(r.URL.Path, "/auth/") && r.Header.Get("Authorization") != "" && r.Header.Get("Origin") == cfg.AdminOrigin
+		if r.Method != "GET" && r.Method != "HEAD" && r.Header.Get("Origin") != cfg.Origin && !mainAdmin {
 			s.fail(w, r, problem(403, "ORIGIN_REJECTED"))
 			return
 		}

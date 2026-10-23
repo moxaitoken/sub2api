@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 )
 
@@ -100,7 +101,17 @@ func localAudit(ctx context.Context, tx *sql.Tx, supplier, op, resource, kind, a
 	if e != nil {
 		return e
 	}
-	_, e = tx.ExecContext(ctx, `INSERT INTO supplier.supplier_audit_events(id,supplier_id,actor_user_id,actor_kind,actor_id,operation_id,resource_type,resource_id,action,result,request_id) VALUES($1,$2,NULL,'supplier',($2::uuid)::text,$3,$4,$5,$6,$7,$3)`, id, supplier, op, kind, resource, action, result)
+	var user, operation any
+	actorKind, actorID := "supplier", supplier
+	if admin := ports.AdminActor(ctx); admin > 0 {
+		user = admin
+		actorKind = "admin"
+		actorID = fmt.Sprint(admin)
+	}
+	if op != "" {
+		operation = op
+	}
+	_, e = tx.ExecContext(ctx, `INSERT INTO supplier.supplier_audit_events(id,supplier_id,actor_user_id,actor_kind,actor_id,operation_id,resource_type,resource_id,action,result,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$1)`, id, supplier, user, actorKind, actorID, operation, kind, resource, action, result)
 	return e
 }
 func (s *Store) ReserveProxy(ctx context.Context, r ports.SupplierRecord, p ports.OwnProxy, key, hash string) (ports.OwnProxy, bool, error) {
@@ -244,6 +255,9 @@ func (s *Store) ReserveOnboarding(ctx context.Context, r ports.SupplierRecord, o
 		o.SessionEpoch = r.SessionEpoch
 		o.SupplierID = r.Supplier.ID
 		_, e = tx.ExecContext(ctx, `INSERT INTO supplier.supplier_oauth_sessions(id,supplier_id,actor_user_id,actor_kind,actor_id,upstream_instance_id,purpose,upstream_session_cipher,key_id,expected_state_hash,expires_at,name,proxy_id,proxy_version,target_group_id,credential_version,session_epoch,begin_key,request_hash) VALUES($1,$2,NULL,'supplier',($2::uuid)::text,$3,'create',''::bytea,$4,decode($5,'hex'),$6,$7,$8,$9,$10,$11,$12,$13,decode($14,'hex'))`, o.ID, o.SupplierID, s.instanceID, o.KeyID, o.StateHash, o.ExpiresAt, o.Name, o.Proxy.ID, o.Proxy.Version, o.GroupID, o.CredentialVersion, o.SessionEpoch, o.BeginKey, o.RequestHash)
+		if e == nil {
+			e = localAudit(ctx, tx, o.SupplierID, "", o.ID, "oauth", "oauth.begin", "succeeded")
+		}
 		return o, e
 	})
 	return out, replay, e
@@ -385,16 +399,21 @@ func (s *Store) FinishOnboarding(ctx context.Context, o ports.BoundOAuth, op por
 	return e
 }
 func (s *Store) CancelOnboarding(ctx context.Context, supplier, id string) error {
-	// This never cancels a code exchange or frees a possibly consumed reservation.
-	result, e := s.db.ExecContext(ctx, `UPDATE supplier.supplier_oauth_sessions SET status='expired',upstream_session_cipher=''::bytea,updated_at=now(),version=version+1 WHERE id=$1 AND supplier_id=$2 AND upstream_instance_id=$3 AND actor_kind='supplier' AND status='created'`, id, supplier, s.instanceID)
-	if e != nil {
-		return mapError(e)
-	}
-	n, _ := result.RowsAffected()
-	if n != 1 {
-		return ports.ErrConflict
-	}
-	return nil
+	_, e := transaction(ctx, s.db, func(tx *sql.Tx) (bool, error) {
+		result, e := tx.ExecContext(ctx, `UPDATE supplier.supplier_oauth_sessions SET status='expired',upstream_session_cipher=''::bytea,updated_at=now(),version=version+1 WHERE id=$1 AND supplier_id=$2 AND upstream_instance_id=$3 AND actor_kind='supplier' AND status='created'`, id, supplier, s.instanceID)
+		if e != nil {
+			return false, e
+		}
+		n, e := result.RowsAffected()
+		if e != nil {
+			return false, e
+		}
+		if n != 1 {
+			return false, ports.ErrConflict
+		}
+		return true, localAudit(ctx, tx, supplier, "", id, "oauth", "oauth.cancel", "succeeded")
+	})
+	return e
 }
 
 func (s *Store) LocalAccountOperation(ctx context.Context, supplier, id string) (ports.AccountOperation, error) {
@@ -404,17 +423,23 @@ func (s *Store) LocalAccountOperation(ctx context.Context, supplier, id string) 
 	return scanLocalOperation(s.db.QueryRowContext(ctx, `SELECT `+localOperationColumns+` FROM supplier.supplier_operations WHERE id=$1 AND supplier_id=$2 AND upstream_instance_id=$3 AND actor_kind='supplier' AND action='oauth.complete'`, id, supplier, s.instanceID))
 }
 func (s *Store) RetestProxy(ctx context.Context, p ports.OwnProxy, valid bool) error {
-	status := "disabled"
-	if valid {
-		status = "active"
-	}
-	result, e := s.db.ExecContext(ctx, `UPDATE supplier.supplier_proxies SET status=$1,updated_at=now(),version=version+1 WHERE id=$2 AND supplier_id=$3 AND upstream_instance_id=$4 AND version=$5 AND status IN ('active','disabled')`, status, p.ID, p.SupplierID, s.instanceID, p.Version)
-	if e != nil {
-		return mapError(e)
-	}
-	n, _ := result.RowsAffected()
-	if n != 1 {
-		return ports.ErrConflict
-	}
-	return nil
+	_, e := transaction(ctx, s.db, func(tx *sql.Tx) (bool, error) {
+		status := "disabled"
+		if valid {
+			status = "active"
+		}
+		result, e := tx.ExecContext(ctx, `UPDATE supplier.supplier_proxies SET status=$1,updated_at=now(),version=version+1 WHERE id=$2 AND supplier_id=$3 AND upstream_instance_id=$4 AND version=$5 AND status IN ('active','disabled')`, status, p.ID, p.SupplierID, s.instanceID, p.Version)
+		if e != nil {
+			return false, e
+		}
+		n, e := result.RowsAffected()
+		if e != nil {
+			return false, e
+		}
+		if n != 1 {
+			return false, ports.ErrConflict
+		}
+		return true, localAudit(ctx, tx, p.SupplierID, "", p.ID, "proxy", "proxy.test", status)
+	})
+	return e
 }

@@ -250,13 +250,13 @@ func (s *Service) AddProxy(ctx context.Context, r ports.SupplierRecord, in ports
 	cfg.Password = ""
 	cfg.Username = ""
 	if e != nil {
-		s.finishUnknownProxy(p, 0)
+		s.finishUnknownProxy(ctx, p, 0)
 		return p, e
 	}
 	p.UpstreamID = remote.ID
 	p.Status = "active"
 	if e = s.checkProxy(ctx, p); e != nil {
-		s.finishUnknownProxy(p, p.UpstreamID)
+		s.finishUnknownProxy(ctx, p, p.UpstreamID)
 		return p, e
 	}
 	valid, e := up.TestProxy(ctx, p.UpstreamID)
@@ -308,12 +308,12 @@ func (s *Service) RetestOwnProxy(ctx context.Context, supplier, id string) (port
 	return store.Proxy(ctx, supplier, id)
 }
 
-func (s *Service) finishUnknownProxy(p ports.OwnProxy, id int64) {
+func (s *Service) finishUnknownProxy(parent context.Context, p ports.OwnProxy, id int64) {
 	store, _, e := s.onboardingPorts()
 	if e != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 3*time.Second)
 	defer cancel()
 	_ = store.FinishProxy(ctx, p, id, "needs_attention")
 }

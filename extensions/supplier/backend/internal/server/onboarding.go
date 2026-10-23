@@ -5,8 +5,14 @@ import (
 	"net/http"
 )
 
+type resourceHandler = func(http.ResponseWriter, *http.Request, ports.SupplierRecord, string) error
+type resourceAuthorizer = func(bool, resourceHandler) http.HandlerFunc
+
 func (s *Server) registerOnboarding(mux *http.ServeMux) {
-	mux.HandleFunc("DELETE /api/supplier/v1/proxies/{id}", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	s.registerResourceOnboarding(mux, "/api/supplier/v1", s.localAuthorize)
+}
+func (s *Server) registerResourceOnboarding(mux *http.ServeMux, prefix string, authorize resourceAuthorizer) {
+	mux.HandleFunc("DELETE "+prefix+"/proxies/{id}", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -19,7 +25,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 200, map[string]bool{"deleted": true})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/supplier/v1/onboarding/options", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("GET "+prefix+"/onboarding/options", authorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -34,7 +40,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 200, map[string]any{"groups": groups, "proxies": proxies})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/supplier/v1/proxies", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("GET "+prefix+"/proxies", authorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -45,7 +51,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 200, map[string]any{"items": items})
 		return nil
 	}))
-	mux.HandleFunc("POST /api/supplier/v1/proxies", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("POST "+prefix+"/proxies", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -65,7 +71,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 201, p)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/supplier/v1/proxies/{id}/test", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("POST "+prefix+"/proxies/{id}/test", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -79,7 +85,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 200, p)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/supplier/v1/oauth/sessions", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("POST "+prefix+"/oauth/sessions", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -101,7 +107,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 201, out)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/supplier/v1/oauth/sessions/{id}/complete", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("POST "+prefix+"/oauth/sessions/{id}/complete", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -130,7 +136,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		}
 		return ports.ErrUnavailable
 	}))
-	mux.HandleFunc("DELETE /api/supplier/v1/oauth/sessions/{id}", s.localAuthorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("DELETE "+prefix+"/oauth/sessions/{id}", authorize(true, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}
@@ -147,7 +153,7 @@ func (s *Server) registerOnboarding(mux *http.ServeMux) {
 		s.reply(w, 200, map[string]bool{"cancelled": true})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/supplier/v1/operations/{id}", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+	mux.HandleFunc("GET "+prefix+"/operations/{id}", authorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		if e := s.accountReady(); e != nil {
 			return e
 		}

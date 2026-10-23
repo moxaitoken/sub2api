@@ -30,6 +30,7 @@ type UsageAccount struct {
 	Name       string `json:"name"`
 	Archived   bool   `json:"archived"`
 	UpstreamID int64  `json:"-"`
+	SupplierID string `json:"-"`
 }
 type UsageQuery struct {
 	Period, AccountID string
@@ -75,7 +76,26 @@ type UsageReport struct {
 	Attempts *string `json:"request_attempts"`
 }
 type UsageStore interface {
-	UsageAccounts(context.Context, string) ([]UsageAccount, error)
-	SyncUsageWindow(context.Context, string, UsageAccount, time.Time, time.Time, func(context.Context) ([]UsageRecord, error)) error
 	UsageReport(context.Context, string, UsageQuery, time.Time, time.Time) (UsageReport, error)
+}
+
+// UsageSyncStore persists page checkpoints in the existing per-account/day
+// cursors. A lease fences concurrent workers; no customer identity is retained.
+type UsageSyncStore interface {
+	UsageDiscoveries(context.Context) ([]UsageAccount, error)
+	DiscoverUsage(context.Context, UsageAccount, time.Time) error
+	RetryUsageDiscovery(context.Context, UsageAccount) error
+	ClaimUsagePage(context.Context, string) (UsageJob, bool, error)
+	ApplyUsagePage(context.Context, UsageJob, UsageSourcePage) error
+	RetryUsagePage(context.Context, UsageJob) error
+}
+type UsageHistorySource interface {
+	UsageEarliest(context.Context, int64) (time.Time, error)
+}
+type UsageJob struct {
+	Account UsageAccount
+	Day     time.Time
+	Page    int
+	Owner   string
+	Version int64
 }

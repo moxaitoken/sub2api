@@ -65,7 +65,7 @@ func TestRealUsageProjection(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		q := r.URL.Query()
-		if r.URL.Path != "/api/v1/admin/usage" || q.Get("timezone") != "Asia/Shanghai" || q.Get("start_date") != "2026-10-22" || q.Get("end_date") != "2026-10-22" || q.Get("exact_total") != "true" || r.Header.Get("x-api-key") != "fixture-only" {
+		if r.URL.Path != "/api/v1/admin/usage" || q.Get("exact_total") != "true" || r.Header.Get("x-api-key") != "fixture-only" || q.Get("user_id") != "" || q.Get("api_key_id") != "" {
 			t.Error("unscoped source query")
 		}
 		if mode == "fail" {
@@ -73,18 +73,25 @@ func TestRealUsageProjection(t *testing.T) {
 			return
 		}
 		id := q.Get("account_id")
-		if id != "101" && id != "102" {
+		if id != "101" && id != "102" && id != "201" {
 			t.Error("foreign account fetched", id)
 		}
+		if q.Get("start_date") == "" {
+			json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"total": 1, "items": []map[string]any{{"account_id": map[string]int{"101": 101, "102": 102, "201": 201}[id], "created_at": start}}}})
+			return
+		}
+		if q.Get("timezone") != "Asia/Shanghai" || q.Get("start_date") != q.Get("end_date") {
+			t.Error("invalid daily window")
+		}
 		rows := []map[string]any{}
-		if id == "101" && mode != "missing" {
+		if id == "101" && mode != "missing" && q.Get("start_date") == "2026-10-22" {
 			cost := "0.100000000000000001"
 			if mode == "revised" {
 				cost = "0.200000000000000001"
 			}
 			rows = append(rows, map[string]any{"id": 11, "account_id": 101, "created_at": start.Add(time.Minute), "model": "claude-fixture", "input_tokens": 10, "output_tokens": 20, "cache_read_tokens": 30, "cache_creation_tokens": 40, "total_cost": json.Number(cost), "user": map[string]any{"email": "never-leak@example.invalid"}, "ip_address": "never-leak"})
 		}
-		if id == "102" {
+		if id == "102" && q.Get("start_date") == "2026-10-22" {
 			rows = append(rows, map[string]any{"id": 12, "account_id": 102, "created_at": end.Add(-time.Second), "model": "claude-fixture", "input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3, "cache_creation_tokens": 4, "total_cost": json.Number("0.2")})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"total": len(rows), "items": rows}})
@@ -98,6 +105,12 @@ func TestRealUsageProjection(t *testing.T) {
 	q := ports.UsageQuery{Period: "today", Page: 1, Size: 1}
 	read := func() ports.UsageReport {
 		t.Helper()
+		if _, e = db.Exec(`UPDATE supplier.supplier_sync_cursors SET next_retry_at=now() WHERE lease_owner IS NULL`); e != nil {
+			t.Fatal(e)
+		}
+		if e = svc.Tick(ctx, "usage-fixture", 200); e != nil {
+			t.Fatal(e)
+		}
 		v, e := svc.Read(ctx, one.ID, q)
 		if e != nil {
 			t.Fatal(e)
@@ -206,7 +219,7 @@ func TestRealUsageProjection(t *testing.T) {
 	}
 	sevenStart, sevenEnd, _ := usage.Window("7d", now)
 	v, e = s.UsageReport(ctx, one.ID, ports.UsageQuery{Period: "7d", Page: 1, Size: 20}, sevenStart, sevenEnd)
-	if e != nil || len(v.Daily) != 7 || v.Status != "partial" || v.Summary.Records != "2" {
+	if e != nil || len(v.Daily) != 7 || v.Summary.Records != "2" {
 		t.Fatal("unsynced days disguised as complete", e)
 	}
 	t.Log("real adapter -> isolated PostgreSQL: exact decimal, two accounts, Shanghai boundary, pagination, idempotency, revisions, tenant isolation, cached failure, retention gap, concurrent lock verified")

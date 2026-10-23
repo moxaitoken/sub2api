@@ -778,6 +778,16 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
+    {
+      path: '/admin/suppliers',
+      label: t('supplierAdmin.management'),
+      icon: UsersIcon,
+      expandOnly: true,
+      children: [
+        { path: '/admin/suppliers', label: t('supplierAdmin.list'), icon: UsersIcon },
+        { path: '/admin/supplier-finance', label: t('supplierAdmin.finance'), icon: CreditCardIcon },
+      ],
+    },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
     {
       path: '/admin/channels',
@@ -899,6 +909,7 @@ function isActive(path: string): boolean {
 
 function isGroupActive(item: NavItem): boolean {
   if (!item.children) return false
+  if (item.path === '/admin/suppliers') return item.children.some(child => isActive(child.path))
   return item.children.some(child => route.path === child.path)
 }
 

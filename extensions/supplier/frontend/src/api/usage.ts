@@ -22,11 +22,11 @@ function account(value: unknown): UsageAccount {
   return { id, name: text(v.name), archived: v.archived }
 }
 function state(value: unknown): 'complete' | 'partial' { if (value !== 'complete' && value !== 'partial') throw new Error('invalid usage'); return value }
-function list(v: unknown): unknown[] { if (!Array.isArray(v) || v.length > 1000) throw new Error('invalid usage'); return v }
+function list(v: unknown): unknown[] { if (!Array.isArray(v)) throw new Error('invalid usage'); return v }
 // Construct an allowlist: upstream/customer identifiers are never copied into UI state.
 export function checkedUsage(value: unknown): UsageReport {
   const v = object(value)
-  if (!['today', '7d', '30d'].includes(text(v.period)) || v.timezone !== 'Asia/Shanghai' || v.request_attempts !== null) throw new Error('invalid usage')
+  if (!['today', '7d', '30d', 'all'].includes(text(v.period)) || v.timezone !== 'Asia/Shanghai' || v.request_attempts !== null) throw new Error('invalid usage')
   return {
     period: v.period as UsageReport['period'], timezone: 'Asia/Shanghai', account_id: text(v.account_id),
     start: timestamp(v.start), end: timestamp(v.end), observed_at: timestamp(v.observed_at),

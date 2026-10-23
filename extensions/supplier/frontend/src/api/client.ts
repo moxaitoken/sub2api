@@ -27,7 +27,7 @@ export class ApiError extends Error {
   }
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   authentication?: boolean
@@ -42,12 +42,14 @@ export class SupplierClient {
   constructor(
     private readonly onUnauthorized: () => void,
     private readonly transport: typeof fetch = (...args) => fetch(...args),
-    private readonly portal: 'supplier' | 'admin' = 'supplier'
+    private readonly portal: 'supplier' | 'admin' = 'supplier',
+    private readonly scopedRequest?: <T>(path: string, options: RequestOptions) => Promise<T>
   ) {}
 
   clearSession(): void { this.csrf = '' }
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    if (this.scopedRequest) return this.scopedRequest<T>(path, options)
     const method = options.method || 'GET'
     const headers = new Headers({ Accept: 'application/json' })
     if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey)

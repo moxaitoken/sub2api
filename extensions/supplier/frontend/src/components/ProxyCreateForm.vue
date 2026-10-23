@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import type { SupplierClient } from '../api/client'
 import type { OwnProxy } from '../api/types'
 import RequestError from './RequestError.vue'
 const props = defineProps<{ client: SupplierClient; inline?: boolean }>()
 const emit = defineEmits<{ created: [proxy: OwnProxy]; saved: [proxy: OwnProxy]; busy: [busy: boolean] }>()
-const { t } = useI18n()
+const { t } = useSupplierI18n()
 const name = ref(''), address = ref(''), region = ref(''), busy = ref(false), error = ref<unknown>(null)
 const key = ref(crypto.randomUUID())
 const saved = ref<OwnProxy | null>(null)
