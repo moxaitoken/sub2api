@@ -27,3 +27,23 @@ func TestLocalPasswordHashAndPolicy(t *testing.T) {
 		t.Fatal("hash check")
 	}
 }
+
+func TestPasswordSymbolsAndWhitespaceAreSignificant(t *testing.T) {
+	for _, p := range []string{"Aa1!@#$%^&*()_+-=[]{};:',.<>/?`~\"\\|", " Aa1!Password ", "密码Aa1！＠＃测试"} {
+		if !ValidPassword(p) {
+			t.Fatal("valid symbolic password rejected")
+		}
+		h, e := HashPassword(p)
+		if e != nil || !CheckPassword(p, h) || CheckPassword(p+"x", h) {
+			t.Fatal("symbolic password hash mismatch", e)
+		}
+		if strings.TrimSpace(p) != p && CheckPassword(strings.TrimSpace(p), h) {
+			t.Fatal("whitespace was stripped")
+		}
+	}
+	for _, p := range []string{"!!!!!!!!!!", "123456789!", "abcdefghij!", "Aa1!", strings.Repeat("A", 64) + "1!"} {
+		if ValidPassword(p) {
+			t.Fatal("password strength requirement changed")
+		}
+	}
+}

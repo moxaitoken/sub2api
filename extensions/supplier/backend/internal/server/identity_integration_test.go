@@ -138,7 +138,34 @@ func TestR2IdentityWithRealPostgres(t *testing.T) {
 	if _, ok := adminData["supplier"]; ok {
 		t.Fatal("admin fabricated supplier")
 	}
-	create := `{"name":"Fixture vendor","login_account":"Vendor_01","initial_password":"FixturePassword!2026"}`
+	// Includes JSON-sensitive quotes/backslashes, symbols and significant spaces.
+	encode := func(v map[string]string) string {
+		b, e := json.Marshal(v)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return string(b)
+	}
+	initialPassword := "  FixturePassword1!@#$%^&*()[]{};:'\"\\|<>/?`~  "
+	resetPassword := "  ResetPassword2!@#$%\"\\  "
+	create := encode(map[string]string{"name": "Fixture vendor", "login_account": "Vendor_01", "initial_password": initialPassword})
+	for _, tc := range []struct{ name, login, password, reason string }{
+		{"", "vendor_01", initialPassword, "INVALID_SUPPLIER_NAME"},
+		{"Fixture", "vendor!", initialPassword, "INVALID_SUPPLIER_LOGIN"},
+		{"Fixture", "vendor_01", "short1!", "INVALID_SUPPLIER_PASSWORD"},
+	} {
+		bad := call("POST", "/api/supplier/admin/v1/suppliers", encode(map[string]string{"name": tc.name, "login_account": tc.login, "initial_password": tc.password}), ac, acsrf, key(), "")
+		want(bad, 400)
+		var failure struct {
+			Reason string `json:"reason"`
+		}
+		if e := json.Unmarshal(bad.Body.Bytes(), &failure); e != nil || failure.Reason != tc.reason {
+			t.Fatal("unsafe or missing field diagnosis", e)
+		}
+		if strings.Contains(bad.Body.String(), tc.password) {
+			t.Fatal("error echoed password")
+		}
+	}
 	createKey := key()
 	want(call("POST", "/api/supplier/admin/v1/suppliers", create, ac, "", createKey, ""), 403)
 	w = call("POST", "/api/supplier/admin/v1/suppliers", create, ac, acsrf, createKey, "")
@@ -172,9 +199,10 @@ func TestR2IdentityWithRealPostgres(t *testing.T) {
 	}
 	// No upstream authentication is needed for local supplier credentials.
 	up.LoginError = ports.ErrUnavailable
-	login := `{"login_account":" vendor_01 ","password":"FixturePassword!2026"}`
+	login := encode(map[string]string{"login_account": " vendor_01 ", "password": initialPassword})
 	w = call("POST", "/api/supplier/v1/auth/login", login, nil, "", "", "")
 	want(w, 200)
+	want(call("POST", "/api/supplier/v1/auth/login", encode(map[string]string{"login_account": "vendor_01", "password": strings.TrimSpace(initialPassword)}), nil, "", "", ""), 401)
 	sc := cookie(w, "__Host-supplier_session")
 	w = call("GET", "/api/supplier/v1/me", "", sc, "", "", "")
 	want(w, 200)
@@ -218,10 +246,10 @@ func TestR2IdentityWithRealPostgres(t *testing.T) {
 	w = call("POST", "/api/supplier/v1/auth/login", login, nil, "", "", "")
 	want(w, 200)
 	sc = cookie(w, "__Host-supplier_session")
-	want(call("POST", "/api/supplier/admin/v1/suppliers/"+id+"/credential-reset", `{"new_password":"ResetPassword!2026"}`, ac, acsrf, key(), "3"), 200)
+	want(call("POST", "/api/supplier/admin/v1/suppliers/"+id+"/credential-reset", encode(map[string]string{"new_password": resetPassword}), ac, acsrf, key(), "3"), 200)
 	want(call("GET", "/api/supplier/v1/me", "", sc, "", "", ""), 401)
 	want(call("POST", "/api/supplier/v1/auth/login", login, nil, "", "", ""), 401)
-	w = call("POST", "/api/supplier/v1/auth/login", `{"login_account":"vendor_01","password":"ResetPassword!2026"}`, nil, "", "", "")
+	w = call("POST", "/api/supplier/v1/auth/login", encode(map[string]string{"login_account": "vendor_01", "password": resetPassword}), nil, "", "", "")
 	want(w, 200)
 	sc = cookie(w, "__Host-supplier_session")
 	w = call("GET", "/api/supplier/v1/me", "", sc, "", "", "")

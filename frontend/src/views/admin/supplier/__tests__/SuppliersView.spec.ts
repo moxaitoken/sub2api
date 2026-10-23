@@ -33,6 +33,19 @@ beforeEach(() => {
   api.accounts.mockResolvedValue({ ...page, items: [{ id: 'owned-account', name: 'Owned Claude', admission_state: 'approved', desired_state: 'paused' }] })
 })
 describe('main supplier administration', () => {
+  it.each([
+    ['INVALID_SUPPLIER_NAME','invalidName'], ['INVALID_SUPPLIER_LOGIN','invalidLogin'],
+    ['INVALID_SUPPLIER_PASSWORD','invalidPassword'], ['INVALID_SUPPLIER_INPUT','invalid']
+  ])('shows safe field diagnosis for %s', async (reason,key) => {
+    const wrapper=mount(SuppliersView,options);await flushPromises()
+    await button(wrapper,'supplierAdmin.create')
+    api.create.mockRejectedValue({status:400,reason,message:'private-password-error'})
+    const inputs=wrapper.get('[role="dialog"]').findAll('input')
+    await inputs[0]!.setValue('Vendor');await inputs[1]!.setValue('vendor_01');await inputs[2]!.setValue('FixturePassword!2026')
+    await wrapper.get('[role="dialog"] form').trigger('submit');await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe(`supplierAdmin.${key}`)
+    expect(wrapper.text()).not.toContain('private-password-error');wrapper.unmount()
+  })
   it('loads real suppliers and searches/reset without a second login form', async () => {
     const wrapper = mount(SuppliersView, options); await flushPromises()
     expect(api.list).toHaveBeenCalledWith('', 1)
@@ -50,11 +63,11 @@ describe('main supplier administration', () => {
     await button(wrapper, 'supplierAdmin.create')
     const dialog = wrapper.get('[role="dialog"]')
     const inputs = dialog.findAll('input')
-    await inputs[0]!.setValue('New vendor'); await inputs[1]!.setValue('new_vendor'); await inputs[2]!.setValue('SyntheticPassword2026')
+    await inputs[0]!.setValue('New vendor'); await inputs[1]!.setValue('new_vendor'); await inputs[2]!.setValue('  Synthetic!@#$%2026  ')
     await dialog.get('form').trigger('submit'); await flushPromises()
-    expect(api.create).toHaveBeenCalledWith({ name: 'New vendor', login_account: 'new_vendor', initial_password: 'SyntheticPassword2026' }, expect.any(String))
+    expect(api.create).toHaveBeenCalledWith({ name: 'New vendor', login_account: 'new_vendor', initial_password: '  Synthetic!@#$%2026  ' }, expect.any(String))
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
-    expect(wrapper.html()).not.toContain('SyntheticPassword2026')
+    expect(wrapper.html()).not.toContain('  Synthetic!@#$%2026  ')
     wrapper.unmount()
   })
   it('reads current details and resets with the current version', async () => {
@@ -62,9 +75,9 @@ describe('main supplier administration', () => {
     await button(wrapper, 'supplierAdmin.details')
     expect(api.detail).toHaveBeenCalledWith(supplier.id)
     await button(wrapper, 'supplierAdmin.resetPassword')
-    await wrapper.get('input[type="password"]').setValue('ReplacementPassword2026')
+    await wrapper.get('input[type="password"]').setValue('  Replacement!@#$%2026  ')
     await wrapper.get('[role="dialog"] form').trigger('submit'); await flushPromises()
-    expect(api.resetPassword).toHaveBeenCalledWith(supplier, 'ReplacementPassword2026', expect.any(String))
+    expect(api.resetPassword).toHaveBeenCalledWith(supplier, '  Replacement!@#$%2026  ', expect.any(String))
     wrapper.unmount()
   })
   it('requires a status confirmation and scopes account reads to the selected supplier', async () => {

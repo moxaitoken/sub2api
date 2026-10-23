@@ -26,7 +26,7 @@ async function submit() {
 </script>
 <template>
   <section class="card login" :class="{ 'supplier-login-box': !administrator }">
-    <div v-if="!administrator" class="login-brand"><PortalIcon name="brand" :size="30" /><b>MOXAI</b></div>
+    <div v-if="!administrator" class="login-brand"><PortalIcon name="brand" :size="30" /><b>Goccmax</b></div>
     <h1>{{ t(administrator ? 'portal.adminLogin' : 'portal.supplierLogin') }}</h1>
     <p class="muted">{{ t(administrator ? 'portal.adminHint' : 'portal.supplierHint') }}</p>
     <RequestError :error="error" />

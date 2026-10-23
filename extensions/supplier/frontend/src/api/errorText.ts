@@ -3,6 +3,7 @@ import { ApiError } from './client'
 export function errorKey(error: unknown): string {
   if (!(error instanceof ApiError)) return 'errors.generic'
   const reasons: Record<string, string> = {
+    INVALID_SUPPLIER_NAME: 'supplierName', INVALID_SUPPLIER_LOGIN: 'supplierLogin', INVALID_SUPPLIER_PASSWORD: 'supplierPassword',
     PROXY_CHECK_FAILED:'proxyCheckFailed', PROXY_CLEANUP_PENDING:'proxyCleanupPending',
     INVALID_PROXY:'proxyInput', PROXY_DNS_REJECTED:'proxyDns', PROXY_ADDRESS_REJECTED:'proxyAddress', PROXY_NOT_AVAILABLE:'proxyUnavailable', PROXY_STATE_DRIFT:'proxyUnavailable', INVALID_SUPPLIER_INPUT: 'invalid', NETWORK_ERROR: 'network', UNAUTHORIZED: 'unauthorized', INVALID_CREDENTIALS: 'unauthorized',
     SUPPLIER_DISABLED: 'supplierDisabled', FORBIDDEN: 'forbidden',

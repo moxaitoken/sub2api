@@ -43,7 +43,10 @@ function failure(cause: unknown): string {
   }
   if (value.status === 409) return t('supplierAdmin.conflict')
   if (value.status === 423) return t('supplierAdmin.compliance')
-  if (value.status === 400) return t('supplierAdmin.invalid')
+  if (value.status === 400) {
+    const fields: Record<string, string> = { INVALID_SUPPLIER_NAME: 'invalidName', INVALID_SUPPLIER_LOGIN: 'invalidLogin', INVALID_SUPPLIER_PASSWORD: 'invalidPassword' }
+    return t(`supplierAdmin.${fields[value.reason || ''] || 'invalid'}`)
+  }
   return t('supplierAdmin.failed')
 }
 async function load(next = page.value) {

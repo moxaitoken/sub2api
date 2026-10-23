@@ -9,6 +9,11 @@ const ok=(data:unknown)=>new Response(JSON.stringify({code:0,data}),{status:200}
 const view=(transport:typeof fetch,administrator=false)=>mount(PortalLoginView,{props:{client:new SupplierClient(()=>undefined,transport,administrator?'admin':'supplier'),administrator},global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
 afterEach(()=>vi.restoreAllMocks())
 describe('R2 login forms',()=>{
+ it('shows Goccmax supplier branding',()=>{
+  const w=view(vi.fn())
+  expect(w.get('.login-brand').text()).toBe('Goccmax')
+  w.unmount()
+ })
  it.each(['zh','en'])('does not offer administrator sign-in on the supplier form (%s)',(locale)=>{
   const w=mount(PortalLoginView,{props:{client:new SupplierClient(()=>undefined,vi.fn()),administrator:false},global:{plugins:[createI18n({legacy:false,locale,messages:{zh,en}})]}})
   expect(w.find('a[href="/?portal=admin"]').exists()).toBe(false)
@@ -23,8 +28,8 @@ describe('R2 login forms',()=>{
  })
  it('submits a non-email local account and immediately clears the password',async()=>{
   let resolve:(r:Response)=>void=()=>undefined;const f=vi.fn<typeof fetch>().mockReturnValue(new Promise<Response>(r=>{resolve=r}));const w=view(f)
-  await w.get('#login-account').setValue('vendor_01');await w.get('#login-password').setValue('FixturePassword!2026');await w.get('form').trigger('submit')
-  expect((w.get('#login-password').element as HTMLInputElement).value).toBe('');expect(JSON.parse(String(f.mock.calls[0][1]?.body))).toEqual({login_account:'vendor_01',password:'FixturePassword!2026'});resolve(ok({requires_2fa:false}));await flushPromises();expect(w.emitted('authenticated')).toHaveLength(1);w.unmount()
+  await w.get('#login-account').setValue('vendor_01');await w.get('#login-password').setValue('  FixturePassword!@#$%2026  ');await w.get('form').trigger('submit')
+  expect((w.get('#login-password').element as HTMLInputElement).value).toBe('');expect(JSON.parse(String(f.mock.calls[0][1]?.body))).toEqual({login_account:'vendor_01',password:'  FixturePassword!@#$%2026  '});resolve(ok({requires_2fa:false}));await flushPromises();expect(w.emitted('authenticated')).toHaveLength(1);w.unmount()
  })
  it('admin completes only a real upstream challenge at the independent endpoint',async()=>{
   const f=vi.fn<typeof fetch>().mockResolvedValueOnce(ok({requires_2fa:true,challenge_id:'fixture',expires_at:'2099-01-01T00:00:00Z'})).mockResolvedValueOnce(ok({requires_2fa:false}));const w=view(f,true)

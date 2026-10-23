@@ -13,11 +13,16 @@ type Service struct {
 	Store ports.IdentityStore
 	Vault *auth.Vault
 }
-type fault struct{}
+type fault struct{ reason string }
 
-func (*fault) Error() string      { return "INVALID_SUPPLIER_INPUT" }
-func (*fault) StatusCode() int    { return 400 }
-func (*fault) ReasonCode() string { return "INVALID_SUPPLIER_INPUT" }
+func (f *fault) Error() string { return f.ReasonCode() }
+func (*fault) StatusCode() int { return 400 }
+func (f *fault) ReasonCode() string {
+	if f.reason == "" {
+		return "INVALID_SUPPLIER_INPUT"
+	}
+	return f.reason
+}
 func (s *Service) Mutate(ctx context.Context, actor int64, action, id, key, name, login, password, status string, version int64) (ports.ManagedSupplier, bool, error) {
 	if actor <= 0 {
 		return ports.ManagedSupplier{}, false, ports.ErrForbidden
@@ -25,11 +30,16 @@ func (s *Service) Mutate(ctx context.Context, actor int64, action, id, key, name
 	name = strings.TrimSpace(name)
 	login = strings.TrimSpace(login)
 	normalized, valid := auth.NormalizeLogin(login)
-	if action == "supplier.create" && (!valid || utf8.RuneCountInString(name) < 1 || utf8.RuneCountInString(name) > 100 || !auth.ValidPassword(password)) {
-		return ports.ManagedSupplier{}, false, &fault{}
+	if action == "supplier.create" {
+		if utf8.RuneCountInString(name) < 1 || utf8.RuneCountInString(name) > 100 {
+			return ports.ManagedSupplier{}, false, &fault{reason: "INVALID_SUPPLIER_NAME"}
+		}
+		if !valid {
+			return ports.ManagedSupplier{}, false, &fault{reason: "INVALID_SUPPLIER_LOGIN"}
+		}
 	}
-	if action == "supplier.reset" && !auth.ValidPassword(password) {
-		return ports.ManagedSupplier{}, false, &fault{}
+	if (action == "supplier.create" || action == "supplier.reset") && !auth.ValidPassword(password) {
+		return ports.ManagedSupplier{}, false, &fault{reason: "INVALID_SUPPLIER_PASSWORD"}
 	}
 	if action == "supplier.status" && status != "active" && status != "disabled" {
 		return ports.ManagedSupplier{}, false, &fault{}

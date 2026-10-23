@@ -4,6 +4,11 @@ import { errorKey } from '../errorText'
 import { identity, success } from './fixtures'
 
 describe('supplier API client', () => {
+  it.each([['INVALID_SUPPLIER_NAME','supplierName'],['INVALID_SUPPLIER_LOGIN','supplierLogin'],['INVALID_SUPPLIER_PASSWORD','supplierPassword']])('preserves safe supplier field diagnosis %s',async(reason,key)=>{
+    const transport=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({code:400,reason,message:'private-secret'}),{status:400}))
+    try { await new SupplierClient(vi.fn(),transport).me();expect.unreachable() }
+    catch(error) {expect(error).toBeInstanceOf(ApiError);expect(errorKey(error)).toBe(`errors.${key}`);expect(String(error)).not.toContain('private-secret')}
+  })
   it.each([['PROXY_CHECK_FAILED',422,'errors.proxyCheckFailed'],['PROXY_CLEANUP_PENDING',503,'errors.proxyCleanupPending'],['PROXY_ADDRESS_REJECTED',400,'errors.proxyAddress'],['PROXY_DNS_REJECTED',400,'errors.proxyDns']] as const)('preserves safe proxy diagnosis %s',async(reason,status,key)=>{
     const transport=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({code:status,reason,message:'private-secret'}),{status}))
     try { await new SupplierClient(vi.fn(),transport).me(); expect.unreachable() }

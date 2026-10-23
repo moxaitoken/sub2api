@@ -87,12 +87,12 @@ onMounted(() => refresh(true))
 <template>
   <div :class="{ 'supplier-shell': identity && !administrator, 'supplier-entry': !identity && !administrator }">
   <aside v-if="identity && !administrator" class="supplier-sidebar">
-    <div class="brand"><PortalIcon name="brand" :size="27" /><b>MOXAI</b><span>{{ t('workspace.supplyPlatform') }}</span></div>
+    <div class="brand"><PortalIcon name="brand" :size="27" /><b>Goccmax</b><span>{{ t('workspace.supplyPlatform') }}</span></div>
     <nav :aria-label="t('app.title')"><div class="nav-group">{{ t('workspace.resources') }}</div><button v-for="item in ['accounts','proxies']" :key="item" :class="{ active: tab === item }" :aria-label="t(item === 'accounts' ? 'accounts.title' : 'portal.proxies')" :aria-current="tab === item ? 'page' : undefined" @click="switchTab(item)"><PortalIcon :name="item" /><span>{{ t(item === 'accounts' ? 'accounts.title' : 'portal.proxies') }}</span><PortalIcon v-if="tab === item" class="push" name="chevron" :size="14" /></button><div class="nav-group statistics-label">{{ t('workspace.statistics') }}</div><button :class="{ active: tab === 'usage' }" :aria-label="t('portal.usage')" :aria-current="tab === 'usage' ? 'page' : undefined" @click="switchTab('usage')"><PortalIcon name="usage" /><span>{{ t('portal.usage') }}</span><PortalIcon v-if="tab === 'usage'" class="push" name="chevron" :size="14" /></button></nav>
     <div class="supplier-sidebar-bottom"><PortalIcon name="user" /><div><b>{{ identity.supplier?.name }}</b><small>{{ identity.principal.login_account }}</small></div></div>
   </aside>
   <div :class="{ 'supplier-body': identity && !administrator }">
-  <header class="topbar" :class="{ 'supplier-header': identity && !administrator }"><template v-if="identity && !administrator"><div class="breadcrumb">Moxai <PortalIcon name="chevron" :size="12" />{{ t('workspace.supplierWorkspace') }}<PortalIcon name="chevron" :size="12" /><b>{{ t(tab === 'accounts' ? 'accounts.title' : `portal.${tab}`) }}</b></div></template><template v-else><div><strong>{{ administrator ? t('app.title') : 'MOXAI' }}</strong><small>{{ t(administrator ? 'portal.stage' : 'workspace.supplyPlatform') }}</small></div></template>
+  <header class="topbar" :class="{ 'supplier-header': identity && !administrator }"><template v-if="identity && !administrator"><div class="breadcrumb">Goccmax <PortalIcon name="chevron" :size="12" />{{ t('workspace.supplierWorkspace') }}<PortalIcon name="chevron" :size="12" /><b>{{ t(tab === 'accounts' ? 'accounts.title' : `portal.${tab}`) }}</b></div></template><template v-else><div><strong>{{ administrator ? t('app.title') : 'Goccmax' }}</strong><small>{{ t(administrator ? 'portal.stage' : 'workspace.supplyPlatform') }}</small></div></template>
     <div class="toolbar"><select v-model="locale" :aria-label="t('app.language')"><option value="zh">简体中文</option><option value="en">English</option></select><button v-if="identity" :disabled="busy" @click="logout">{{ t('app.logout') }}</button></div>
   </header>
   <main :class="{ 'supplier-main': identity && !administrator }">
@@ -125,7 +125,7 @@ onMounted(() => refresh(true))
         <button :disabled="busy" @click="dialog = null; password = ''; selected = null">{{ t('accounts.cancel') }}</button>
       </section></div>
     </template>
-    <footer v-if="identity && !administrator" class="supplier-footer"><span>MOXAI / {{ t('workspace.supplierWorkspace') }}</span><span>{{ t('workspace.ownScope') }}</span></footer>
+    <footer v-if="identity && !administrator" class="supplier-footer"><span>Goccmax / {{ t('workspace.supplierWorkspace') }}</span><span>{{ t('workspace.ownScope') }}</span></footer>
   </main>
   </div></div>
 </template>

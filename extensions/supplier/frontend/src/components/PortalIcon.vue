@@ -1,7 +1,7 @@
 <script setup lang="ts">
 withDefaults(defineProps<{ name: string; size?: number }>(), { size: 18 })
 const paths: Record<string, string> = {
-  brand: 'M4 17V7l4 7 4-7 4 7 4-7v10M4 7l8-4 8 4',
+  brand: 'M19 6.5A8 8 0 1 0 20 15v-3h-8',
   accounts: 'M4 4h16v6H4zM4 14h16v6H4zM7 7h.01M7 17h.01M11 7h6M11 17h6',
   proxies: 'M4 4h6v6H4zM14 14h6v6h-6zM7 10v7h7M10 7h7v7',
   usage: 'M4 3v17h17M8 15v-4M13 15V6M18 15V9',

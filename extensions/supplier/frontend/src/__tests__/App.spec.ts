@@ -13,6 +13,16 @@ const page = (items:unknown[]) => ({items,total:items.length,page:1,page_size:20
 const mountApp = () => mount(App,{global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
 afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();window.history.replaceState(null,'','/')})
 describe('R2 portal boundaries',()=>{
+ it('uses Goccmax consistently in supplier navigation and footer',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(ok(local)).mockResolvedValueOnce(ok(page([]))))
+  const w=mountApp();await flushPromises()
+  expect(w.get('.brand b').text()).toBe('Goccmax')
+  expect(w.get('.breadcrumb').text()).toContain('Goccmax')
+  expect(w.get('.supplier-footer').text()).toContain('Goccmax')
+  expect(w.text()).not.toMatch(/MOXAI|Moxai/)
+  w.unmount()
+ })
+
  it('shows local account login on initial 401 without raw failure',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('{}',{status:401})))
   const w=mountApp();await flushPromises();expect(w.get('#login-account').attributes('type')).toBe('text');expect(w.find('[role=alert]').exists()).toBe(false);w.unmount()
