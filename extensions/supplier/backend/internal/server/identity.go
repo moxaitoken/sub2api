@@ -25,6 +25,7 @@ func (s *Server) registerIdentityRoutes(mux *http.ServeMux) {
 		admin.cookieName = "supplier_admin"
 		admin.challengeName = "supplier_admin_challenge"
 	}
+	admin.registerGroupAccess(mux)
 	admin.registerFinance(mux)
 	admin.registerAdminResources(mux)
 	mux.HandleFunc("POST /api/supplier/admin/v1/auth/login", admin.login)

@@ -396,6 +396,7 @@ type UpdateGroupInput struct {
 }
 
 type CreateAccountInput struct {
+	Schedulable        *bool // nil preserves the upstream default (true).
 	Name               string
 	Notes              *string
 	Platform           string

@@ -31,9 +31,6 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 	if e = s.checkGroup(ctx, in.GroupID); e != nil {
 		return zero, e
 	}
-	if e = s.Upstream.CheckQuarantine(ctx, s.QuarantineID); e != nil {
-		return zero, e
-	}
 	id, e := auth.NewID()
 	if e != nil {
 		return zero, e
@@ -226,21 +223,17 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 		step = "proxy_rejected"
 		return out, err
 	}
-	if err = s.Upstream.CheckQuarantine(ctx, s.QuarantineID); err != nil {
-		step = "quarantine_rejected"
-		return out, err
-	}
 	knownFailure = false
 	step = "account_create_unknown"
 	if err = s.Store.CheckpointAccountOperation(ctx, out, "running", "account_create_started"); err != nil {
 		return out, err
 	}
-	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, s.QuarantineID, o.Proxy.UpstreamID)
+	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, o.GroupID, o.Proxy.UpstreamID)
 	if err != nil {
 		return out, err
 	}
 	account.UpstreamID = created.ID
-	if !matches(created, []int64{s.QuarantineID}) || created.ProxyID == nil || *created.ProxyID != o.Proxy.UpstreamID {
+	if created.Schedulable || !matches(created, []int64{o.GroupID}) || created.ProxyID == nil || *created.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
 	if err = s.Upstream.SetAccountSchedulable(ctx, created.ID, false); err != nil {
@@ -250,7 +243,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err != nil {
 		return out, err
 	}
-	if read.ID != created.ID || read.Schedulable || !matches(read, []int64{s.QuarantineID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
+	if read.ID != created.ID || read.Schedulable || !matches(read, []int64{o.GroupID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
 	if err = store.CheckOnboarding(ctx, o); err != nil {
@@ -262,25 +255,31 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err = s.checkGroup(ctx, o.GroupID); err != nil {
 		return out, err
 	}
-	step = "account_group_unknown"
-	if err = s.Store.CheckpointAccountOperation(ctx, out, "running", "account_group_started"); err != nil {
+	// Persist resource ownership before the first enable attempt. A crash after this
+	// checkpoint is reconcilable without repeating OAuth or creating another account.
+	account.Admission = "approved"
+	account.Desired = "paused"
+	prepared, prepareErr := store.PrepareOnboarding(ctx, o, out, account)
+	if prepareErr != nil {
+		return out, prepareErr
+	}
+	account = prepared
+	if err = store.CheckOnboarding(ctx, o); err != nil {
 		return out, err
 	}
-	if err = s.Upstream.SetAccountGroups(ctx, created.ID, []int64{o.GroupID}); err != nil {
+	step = "account_enable_unknown"
+	if err = s.Upstream.SetAccountSchedulable(ctx, created.ID, true); err != nil {
 		return out, err
 	}
 	read, err = s.Upstream.ReadAccount(ctx, created.ID)
 	if err != nil {
 		return out, err
 	}
-	if read.ID != created.ID || read.Schedulable || !matches(read, []int64{o.GroupID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
+	if read.ID != created.ID || !read.Schedulable || !matches(read, []int64{o.GroupID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
-	// Manual admission is not reintroduced. Identity and binding are verified,
-	// but scheduling stays paused until the separate eligibility/enable capability exists.
-	account.Admission = "approved"
-	account.Desired = "paused"
-	step = "created_paused"
+	account.Desired = "running"
+	step = "created_running"
 	if err = store.FinishOnboarding(ctx, o, out, account, "succeeded", step); err != nil {
 		return out, err
 	}

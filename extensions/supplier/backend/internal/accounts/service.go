@@ -27,6 +27,7 @@ type Service struct {
 	IdentityKeyID  string
 	QuarantineID   int64
 	ApprovedGroups []int64
+	GroupPolicies  ports.GroupAccessStore
 	ProxyCapacity  int64
 }
 
@@ -49,7 +50,7 @@ type Authorization struct {
 }
 
 func (s *Service) ready() error {
-	if s == nil || s.Store == nil || s.Upstream == nil || s.Vault == nil || s.KeyID == "" || len(s.IdentityKey) != 32 || s.IdentityKeyID == "" || s.QuarantineID <= 0 {
+	if s == nil || s.Store == nil || s.Upstream == nil || s.Vault == nil || s.KeyID == "" || len(s.IdentityKey) != 32 || s.IdentityKeyID == "" {
 		return failure(503, "ACCOUNT_SERVICE_NOT_CONFIGURED")
 	}
 	return nil

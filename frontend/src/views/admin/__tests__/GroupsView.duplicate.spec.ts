@@ -450,3 +450,9 @@ describe('GroupsView duplicate action', () => {
   })
 
 })
+
+// Supplier access is separately tested; group regressions must not issue real HTTP.
+vi.mock('@/api/admin/suppliers', () => ({ supplierGroupAPI: {
+  get: vi.fn().mockResolvedValue({ group_id: 1, enabled: false, version: 0 }),
+  set: vi.fn().mockResolvedValue({ group_id: 1, enabled: true, version: 1 })
+} }))

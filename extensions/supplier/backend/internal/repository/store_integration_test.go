@@ -111,7 +111,7 @@ func TestPostgresStore(t *testing.T) {
 			t.Fatal(err)
 		}
 		var count int
-		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != 10 {
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != 11 {
 			t.Fatalf("migration count %d: %v", count, err)
 		}
 		if _, err = db.ExecContext(ctx, `UPDATE supplier.schema_migrations SET checksum=repeat('0',64) WHERE version='002_session_binding.sql'`); err != nil {
@@ -126,6 +126,38 @@ func TestPostgresStore(t *testing.T) {
 		}
 		if err := New(db, testInstance, strings.Repeat("b", 40)).CheckMigrations(ctx); !errors.Is(err, ports.ErrConflict) {
 			t.Fatalf("wrong source accepted: %v", err)
+		}
+	})
+	t.Run("group access version audit and seed once", func(t *testing.T) {
+		if e := s.SeedGroupAccess(ctx, []int64{2}); e != nil {
+			t.Fatal(e)
+		}
+		x, e := s.GroupAccess(ctx, 2)
+		if e != nil || !x.Enabled || x.Version != 1 {
+			t.Fatal(x, e)
+		}
+		x.Enabled = false
+		got, e := s.SetGroupAccess(ctx, x, 42)
+		if e != nil || got.Version != 2 {
+			t.Fatal(got, e)
+		}
+		if _, e = s.SetGroupAccess(ctx, x, 43); !errors.Is(e, ports.ErrConflict) {
+			t.Fatal("stale write accepted", e)
+		}
+		if e = s.SeedGroupAccess(ctx, []int64{2, 3}); e != nil {
+			t.Fatal(e)
+		}
+		ids, e := s.EnabledGroupIDs(ctx)
+		if e != nil || len(ids) != 0 {
+			t.Fatal("restart re-enabled disabled group", ids, e)
+		}
+		missing, e := s.GroupAccess(ctx, 99)
+		if e != nil || missing.Enabled || missing.Version != 0 {
+			t.Fatal(missing, e)
+		}
+		var n int
+		if e = db.QueryRow(`SELECT count(*) FROM supplier.group_access_audit WHERE actor_id=42 AND group_id=2 AND NOT enabled`).Scan(&n); e != nil || n != 1 {
+			t.Fatal("audit", n, e)
 		}
 	})
 	t.Run("single identity uniqueness and tenant scoping", func(t *testing.T) {
@@ -450,7 +482,7 @@ func TestPostgresStore(t *testing.T) {
 					t.Fatal(err)
 				}
 				if scenario == "one_owner" {
-					if !revoked || migrations != 10 {
+					if !revoked || migrations != 11 {
 						t.Fatal("retired ops session or migration state", revoked, migrations)
 					}
 					if _, err := db.ExecContext(ctx, `UPDATE supplier.supplier_sessions SET revoked_at=NULL WHERE id=$1`, opsID); !errors.Is(mapError(err), ports.ErrConflict) {

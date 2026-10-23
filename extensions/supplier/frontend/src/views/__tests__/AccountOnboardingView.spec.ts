@@ -40,7 +40,7 @@ describe('manual supplier account onboarding',()=>{
   expect(generate.attributes('disabled')).toBeUndefined()
   w.unmount()
  })
- it('freezes proxy/group, opens an official URL, clears submitted code immediately and reports created paused',async()=>{
+ it('freezes proxy/group, opens an official URL, clears submitted code immediately and reports successfully validated and enabled',async()=>{
   const {wrapper:w,fetcher:f}=await view([ok(authorization),ok({id:'operation-fixture',action:'oauth.complete',state:'succeeded',step:'created_paused',account_id:'account-fixture'})])
   await w.findAll('select')[1].setValue(proxy.id)
   await w.findAll('button').find(b=>b.text()==='Generate authorization link')!.trigger('click');await flushPromises()
@@ -53,7 +53,7 @@ describe('manual supplier account onboarding',()=>{
   const storage=vi.spyOn(Storage.prototype,'setItem')
   await w.get('form').trigger('submit')
   expect((w.get('textarea').element as HTMLTextAreaElement).value).toBe('')
-  await flushPromises();expect(w.text()).toContain('Account added');expect(w.text()).toContain('remains paused');expect(w.emitted('created')).toHaveLength(1);expect(storage).not.toHaveBeenCalled();w.unmount()
+  await flushPromises();expect(w.text()).toContain('Account added');expect(w.text()).toContain('enabled after validation');expect(w.emitted('created')).toHaveLength(1);expect(storage).not.toHaveBeenCalled();w.unmount()
  })
  it('cancels an unconsumed authorization when the user closes the dialog',async()=>{
   const {wrapper:w,fetcher:f}=await view([ok(authorization),ok({cancelled:true})])

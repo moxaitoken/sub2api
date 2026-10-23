@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { request, requireAcknowledgement } = vi.hoisted(() => ({ request: vi.fn(), requireAcknowledgement: vi.fn() }))
 vi.mock('@/api/client', () => ({ apiClient: { request } }))
 vi.mock('@/stores/adminCompliance', () => ({ useAdminComplianceStore: () => ({ requireAcknowledgement }) }))
-import { supplierResourceClient, supplierFinanceAPI, supplierAdminAPI } from '../suppliers'
+import { supplierResourceClient, supplierFinanceAPI, supplierAdminAPI, supplierGroupAPI } from '../suppliers'
 beforeEach(() => { vi.resetAllMocks(); request.mockResolvedValue({ data: {} }) })
 describe('supplier main client integration', () => {
   it('uses the main client at a fixed same-origin path and keeps mutation controls', async () => {
@@ -35,4 +35,9 @@ it('adapts main automatic timezone without weakening strict supplier queries',as
   await supplierFinanceAPI.ledger()
   const config=request.mock.calls[0]![0]
   expect(config.paramsSerializer.serialize({timezone:'Asia/Shanghai',page:2})).toBe('page=2')
+})
+
+it('saves supplier group admission without writing the upstream group', async () => {
+  await supplierGroupAPI.set(2,true,7)
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({method:'PUT',url:'/api/supplier/admin/v1/groups/2/access',data:{enabled:true},headers:{'If-Match':'7'}}))
 })

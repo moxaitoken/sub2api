@@ -77,14 +77,14 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = '' })
         </div>
         <div class="onboarding-form"><label>{{ t('onboarding.group') }}<select v-model="group" :disabled="busy"><option v-if="!options.groups.length" :value="0">{{ t('onboarding.noGroup') }}</option><option v-for="item in options.groups" :key="item.id" :value="item.id">{{ item.name }}</option></select></label></div>
         <button class="text-button" type="button" :aria-expanded="advanced" @click="advanced = !advanced">{{ t('onboarding.advanced') }} ⌄</button><div v-if="advanced" class="onboarding-form"><label>{{ t('accounts.name') }}<input v-model="name" maxlength="100" :placeholder="t('onboarding.nameHint')" :disabled="busy" /></label></div>
-        <p class="onboarding-hint">{{ t('onboarding.pausedHint') }}</p><button class="primary wide" :disabled="!canBegin" @click="begin">{{ t(busy ? 'auth.submitting' : 'onboarding.generate') }}</button>
+        <p class="onboarding-hint">{{ t('onboarding.schedulingHint') }}</p><button class="primary wide" :disabled="!canBegin" @click="begin">{{ t(busy ? 'auth.submitting' : 'onboarding.generate') }}</button>
       </template>
       <template v-else-if="authorization">
         <div class="authorization-summary"><b>{{ t('onboarding.parametersLocked') }}</b><small>{{ t('onboarding.expires') }} {{ new Date(authorization.expires_at).toLocaleString() }}</small></div>
         <a class="authorization-link" :href="authorization.authorization_url" target="_blank" rel="noopener noreferrer">{{ t('accounts.openOfficial') }} ↗</a>
         <p class="onboarding-hint">{{ t('onboarding.codeHint') }}</p>
         <form v-if="!operation" class="onboarding-form" @submit.prevent="complete"><label>{{ t('onboarding.callback') }}<textarea v-model="code" required maxlength="8192" autocomplete="off" spellcheck="false" :disabled="busy" /></label><button class="primary" :disabled="busy || !code.trim()">{{ t(busy ? 'auth.submitting' : 'onboarding.finish') }}</button></form>
-        <div v-if="operation" class="onboarding-result" :class="operation.state" role="status"><b>{{ t(`onboarding.results.${operation.state}`) }}</b><p>{{ t(operation.state === 'succeeded' ? 'onboarding.createdPaused' : 'onboarding.noReplay') }}</p><small>{{ t('onboarding.operationID') }} {{ operation.id }}</small></div>
+        <div v-if="operation" class="onboarding-result" :class="operation.state" role="status"><b>{{ t(`onboarding.results.${operation.state}`) }}</b><p>{{ t(operation.state === 'succeeded' ? 'onboarding.createdRunning' : 'onboarding.noReplay') }}</p><small>{{ t('onboarding.operationID') }} {{ operation.id }}</small></div>
         <p v-else-if="submitted && !busy" class="onboarding-warning">{{ t('onboarding.uncertain') }}</p>
       </template>
       <div class="dialog-footer"><button :disabled="busy || loading" @click="close">{{ t(operation ? 'workspace.close' : 'accounts.cancel') }}</button><button v-if="error && !authorization" :disabled="busy" @click="load">{{ t('app.refresh') }}</button><button v-if="error && operation" @click="check(operation.id)">{{ t('onboarding.checkResult') }}</button></div>

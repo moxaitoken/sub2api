@@ -71,7 +71,7 @@ func TestR2LocalOnboarding(t *testing.T) {
 	proxies := map[int64]ports.RemoteProxy{}
 	remoteAccounts := map[int64]ports.RemoteAccount{}
 	generateCalls, exchangeCalls, createCalls := 0, 0, 0
-	failCreate := false
+	failCreate, failEnable := false, false
 	failDelete, failProxyTest := false, false
 	nextProxyID := int64(100)
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +83,8 @@ func TestR2LocalOnboarding(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		var data any
 		switch {
+		case r.URL.Path == "/api/v1/admin/accounts/creation-capabilities":
+			data = map[string]bool{"schedulable_on_create": true}
 		case r.URL.Path == "/api/v1/admin/groups/1":
 			data = map[string]any{"id": 1, "name": "Quarantine", "platform": "anthropic", "status": "inactive", "is_exclusive": true}
 		case r.URL.Path == "/api/v1/admin/groups/1/api-keys":
@@ -141,6 +143,9 @@ func TestR2LocalOnboarding(t *testing.T) {
 			}
 			exchangeCalls++
 			uuid := "11111111-1111-4111-8111-111111111111"
+			if strings.Contains(body["code"].(string), "enablefail") {
+				uuid = "33333333-3333-4333-8333-333333333333"
+			}
 			if strings.Contains(body["code"].(string), "unknown") {
 				uuid = "22222222-2222-4222-8222-222222222222"
 			}
@@ -154,20 +159,21 @@ func TestR2LocalOnboarding(t *testing.T) {
 		case r.URL.Path == "/api/v1/admin/accounts" && r.Method == "POST":
 			createCalls++
 			var in struct {
+				Schedulable *bool `json:"schedulable"`
 				Name        string
 				ProxyID     int64   `json:"proxy_id"`
 				GroupIDs    []int64 `json:"group_ids"`
 				Credentials map[string]any
 			}
 			json.NewDecoder(r.Body).Decode(&in)
-			if in.ProxyID <= 0 || len(in.GroupIDs) != 1 || in.GroupIDs[0] != 1 {
+			if in.ProxyID <= 0 || len(in.GroupIDs) != 1 || in.GroupIDs[0] != 2 || in.Schedulable == nil || *in.Schedulable {
 				t.Error("unsafe create")
 			}
 			id := int64(200 + len(remoteAccounts))
-			a := ports.RemoteAccount{ID: id, Name: in.Name, Platform: "anthropic", Type: "oauth", Status: "active", Schedulable: true, ProxyID: &in.ProxyID, Credentials: in.Credentials}
+			a := ports.RemoteAccount{ID: id, Name: in.Name, Platform: "anthropic", Type: "oauth", Status: "active", Schedulable: false, ProxyID: &in.ProxyID, Credentials: in.Credentials}
 			a.Groups = append(a.Groups, struct {
 				ID int64 `json:"id"`
-			}{1})
+			}{2})
 			remoteAccounts[id] = a
 			if failCreate {
 				w.WriteHeader(502)
@@ -203,6 +209,10 @@ func TestR2LocalOnboarding(t *testing.T) {
 				json.NewDecoder(r.Body).Decode(&in)
 				a.Schedulable = in.Schedulable
 				remoteAccounts[id] = a
+				if in.Schedulable && failEnable {
+					w.WriteHeader(502)
+					return
+				}
 				data = map[string]bool{"ok": true}
 			} else {
 				data = a
@@ -222,7 +232,10 @@ func TestR2LocalOnboarding(t *testing.T) {
 	upstream := testutil.NewUpstream()
 	local := &auth.Service{Store: store, Local: store, Upstream: upstream, Vault: vault, InstanceID: instance, KeyID: "fixture"}
 	admin := &auth.Service{Store: store, Upstream: upstream, Vault: vault, InstanceID: instance, KeyID: "fixture", Administrator: true}
-	business := &accounts.Service{Store: store, Upstream: accountUp, Vault: vault, KeyID: "fixture", IdentityKey: bytes.Repeat([]byte{9}, 32), IdentityKeyID: "identity-fixture", QuarantineID: 1, ApprovedGroups: []int64{2}, ProxyCapacity: 1}
+	business := &accounts.Service{Store: store, Upstream: accountUp, Vault: vault, KeyID: "fixture", IdentityKey: bytes.Repeat([]byte{9}, 32), IdentityKeyID: "identity-fixture", QuarantineID: 1, ApprovedGroups: []int64{2}, ProxyCapacity: 1, GroupPolicies: store}
+	if _, e = store.SetGroupAccess(ctx, ports.GroupAccess{GroupID: 2, Enabled: true}, 42); e != nil {
+		t.Fatal(e)
+	}
 	h, e := New(local, Config{Origin: origin, Suppliers: management, Admin: admin, Accounts: business})
 	if e != nil {
 		t.Fatal(e)
@@ -328,6 +341,25 @@ func TestR2LocalOnboarding(t *testing.T) {
 	if e = store.CancelOnboarding(ctx, first.ID, held.ID); e != nil {
 		t.Fatal(e)
 	}
+	// Closing admission changes options, not existing resources or user pricing.
+	policy, e := store.GroupAccess(ctx, 2)
+	if e != nil {
+		t.Fatal(e)
+	}
+	policy.Enabled = false
+	policy, e = store.SetGroupAccess(ctx, policy, 42)
+	if e != nil {
+		t.Fatal(e)
+	}
+	groups, e := business.Groups(ctx)
+	if e != nil || len(groups) != 0 {
+		t.Fatal(groups, e)
+	}
+	want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{ProxyID: proxyID, GroupID: 2}, c1, csrf1, key()), 403)
+	policy.Enabled = true
+	if _, e = store.SetGroupAccess(ctx, policy, 42); e != nil {
+		t.Fatal(e)
+	}
 	// Begin is idempotent, settings freeze, and invalid state never exchanges.
 	beginKey := key()
 	beginInput := ports.BeginOnboarding{Name: "Real fixture account", ProxyID: proxyID, GroupID: 2}
@@ -356,11 +388,11 @@ func TestR2LocalOnboarding(t *testing.T) {
 	}
 	want(call("GET", "/api/supplier/v1/operations/"+opID, nil, c2, "", ""), 404)
 	items, total, e := store.Accounts(ctx, first.ID, 1, 20)
-	if e != nil || total != 1 || items[0].Admission != "approved" || items[0].Desired != "paused" {
+	if e != nil || total != 1 || items[0].Admission != "approved" || items[0].Desired != "running" {
 		t.Fatal("incorrect account outcome", items, total, e)
 	}
-	if remoteAccounts[items[0].UpstreamID].Schedulable {
-		t.Fatal("created account became schedulable")
+	if !remoteAccounts[items[0].UpstreamID].Schedulable {
+		t.Fatal("validated account was not enabled")
 	}
 	// Unknown external create must keep its reservation/account fence and never replay.
 	w = call("POST", "/api/supplier/v1/proxies", ports.ProxyInput{Name: "Second proxy", Address: "8.8.4.4:8080", Region: "SG"}, c1, csrf1, key())
@@ -468,5 +500,28 @@ func TestR2LocalOnboarding(t *testing.T) {
 	if exchangeCalls != 2 {
 		t.Fatal("reset authorization consumed")
 	}
-	t.Log("R2 onboarding: real PG + local identity + synthetic upstream: proxy/CSRF/ownership/capacity/idempotency/state/paused creation/uncertain outcome verified; no live Claude traffic")
+	// An ambiguous enable response must compensate back to paused; no new OAuth/create on retry.
+	failEnable = true
+	data = want(call("POST", "/api/supplier/v1/proxies", ports.ProxyInput{Name: "Enable failure", Address: "4.2.2.2:8080", Region: "US"}, c2, csrf2, key()), 201)
+	var failProxy string
+	json.Unmarshal(data["id"], &failProxy)
+	data = want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{Name: "Enable failure", ProxyID: failProxy, GroupID: 2}, c2, csrf2, key()), 201)
+	var failOAuth string
+	json.Unmarshal(data["id"], &failOAuth)
+	failKey := key()
+	data = want(call("POST", "/api/supplier/v1/oauth/sessions/"+failOAuth+"/complete", map[string]string{"authorization_code": "enablefail#fixture-state"}, c2, csrf2, failKey), 202)
+	json.Unmarshal(data["state"], &state)
+	if state != "needs_attention" {
+		t.Fatal("ambiguous activation not recorded", state)
+	}
+	rows, n, e := store.Accounts(ctx, second.ID, 1, 20)
+	if e != nil || n != 1 || rows[0].Desired != "paused" || remoteAccounts[rows[0].UpstreamID].Schedulable {
+		t.Fatal("failed activation still schedulable", rows, n, e)
+	}
+	beforeCreates := createCalls
+	want(call("POST", "/api/supplier/v1/oauth/sessions/"+failOAuth+"/complete", map[string]string{"authorization_code": "enablefail#fixture-state"}, c2, csrf2, failKey), 202)
+	if createCalls != beforeCreates {
+		t.Fatal("activation failure replayed creation")
+	}
+	t.Log("R2 onboarding: real PG + local identity + synthetic upstream: proxy/CSRF/ownership/capacity/idempotency/state/atomic paused creation then automatic enabling/uncertain outcome verified; no live Claude traffic")
 }

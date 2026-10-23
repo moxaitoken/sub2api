@@ -1,5 +1,7 @@
 # 供应商模块
 
+> 分组接入与账号启用流程以 [2026-10-23 接入调整](docs/group-access.md) 为准。
+
 目标以 [R2架构](docs/architecture.md) 和 [详细设计](docs/phase-1-technical-design.md) 为准。当前完成的是 **R2 D1身份与管理端**，不是供应商模块全部功能。
 
 ## 当前可用

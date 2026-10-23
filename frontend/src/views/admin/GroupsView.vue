@@ -706,6 +706,10 @@
           </div>
         </div>
 
+        <div v-if="createForm.platform === 'anthropic'">
+          <label class="flex items-center gap-3"><input v-model="createSupplierAccess" type="checkbox" role="switch" :aria-checked="createSupplierAccess" /><span>{{ t('supplierPortal.groupAccess.label') }}</span></label>
+          <p class="input-hint">{{ t('supplierPortal.groupAccess.hint') }}</p>
+        </div>
         <!-- Subscription Configuration -->
         <div class="mt-4 border-t pt-4">
           <div>
@@ -2344,6 +2348,8 @@
           <label class="input-label">{{ t("admin.groups.form.status") }}</label>
           <Select v-model="editForm.status" :options="editStatusOptions" />
         </div>
+
+        <SupplierGroupAccess v-if="editingGroup" :group-id="editingGroup.id" :platform="editingGroup.platform" :status="editingGroup.status" />
 
         <!-- Subscription Configuration -->
         <div class="mt-4 border-t pt-4">
@@ -4271,6 +4277,8 @@ import { useAppStore } from "@/stores/app";
 import { useAuthStore } from "@/stores/auth";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
+import { supplierGroupAPI } from "@/api/admin/suppliers";
+import SupplierGroupAccess from "@/components/supplier/SupplierGroupAccess.vue";
 import type {
   AdminGroup,
   CodexModelsManifestConfig,
@@ -4823,6 +4831,7 @@ const sortState = reactive({
 
 let abortController: AbortController | null = null;
 
+const createSupplierAccess = ref(false);
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showDeleteDialog = ref(false);
@@ -5775,6 +5784,7 @@ const closeCreateModal = () => {
   createForm.i18n = {};
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createSupplierAccess.value = false;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6032,7 +6042,15 @@ const handleCreateGroup = async () => {
           platform: createForm.platform,
         }
       : requestData;
-    await adminAPI.groups.create(payload);
+    const createdGroup = await adminAPI.groups.create(payload);
+    if (createSupplierAccess.value && createdGroup.platform === 'anthropic') {
+      try { await supplierGroupAPI.set(createdGroup.id, true, 0); }
+      catch {
+        closeCreateModal(); loadGroups(); await handleEdit(createdGroup);
+        appStore.showError(t('supplierPortal.groupAccess.createdPartial'));
+        return;
+      }
+    }
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
     loadGroups();

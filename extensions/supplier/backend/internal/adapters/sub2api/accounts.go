@@ -113,6 +113,16 @@ func (c *AccountClient) createClaudeAccount(ctx context.Context, name, key strin
 		if *proxy <= 0 {
 			return result, ports.ErrForbidden
 		}
+		var caps struct {
+			Safe bool `json:"schedulable_on_create"`
+		}
+		if err := c.call(ctx, "GET", "/api/v1/admin/accounts/creation-capabilities", nil, &caps, ""); err != nil {
+			return result, err
+		}
+		if !caps.Safe {
+			return result, ports.ErrUnavailable
+		}
+		payload["schedulable"] = false
 		payload["proxy_id"] = *proxy
 	}
 	err := c.call(ctx, "POST", "/api/v1/admin/accounts", payload, &result, key)

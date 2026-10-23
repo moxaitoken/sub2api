@@ -102,7 +102,7 @@ func run() error {
 	svc := &auth.Service{Store: store, Upstream: upstream, Vault: vault, InstanceID: instance, KeyID: keyID, Local: store}
 	adminService := &auth.Service{Store: store, Upstream: upstream, Vault: vault, InstanceID: instance, KeyID: keyID, Administrator: true}
 	supplierService := &suppliers.Service{Store: store, Vault: vault}
-	accountService := &accounts.Service{Store: store, Vault: vault, KeyID: keyID, IdentityKeyID: os.Getenv("SUPPLIER_IDENTITY_KEY_ID"), ProxyCapacity: 1}
+	accountService := &accounts.Service{Store: store, Vault: vault, KeyID: keyID, IdentityKeyID: os.Getenv("SUPPLIER_IDENTITY_KEY_ID"), ProxyCapacity: 1, GroupPolicies: store}
 	usageService := &usage.Service{Store: store}
 	if machineKey := os.Getenv("SUPPLIER_ADMIN_API_KEY"); machineKey != "" {
 		accountService.Upstream, err = sub2api.NewAccountClient(os.Getenv("SUPPLIER_UPSTREAM_URL"), machineKey)
@@ -114,21 +114,21 @@ func run() error {
 		if err != nil || len(accountService.IdentityKey) != 32 || accountService.IdentityKeyID == "" {
 			return fmt.Errorf("independent stable identity fingerprint key and key ID required")
 		}
-		accountService.QuarantineID, err = strconv.ParseInt(os.Getenv("SUPPLIER_QUARANTINE_GROUP_ID"), 10, 64)
-		if err != nil || accountService.QuarantineID <= 0 {
-			return fmt.Errorf("explicit quarantine group ID required")
-		}
 		for _, raw := range strings.Split(os.Getenv("SUPPLIER_APPROVED_GROUP_IDS"), ",") {
 			if raw == "" {
 				continue
 			}
 			id, e := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-			if e != nil || id <= 0 || id == accountService.QuarantineID {
+			if e != nil || id <= 0 {
 				return fmt.Errorf("invalid approved group ID")
 			}
 			accountService.ApprovedGroups = append(accountService.ApprovedGroups, id)
 		}
 	}
+	if err = store.SeedGroupAccess(ctx, accountService.ApprovedGroups); err != nil {
+		return fmt.Errorf("supplier group configuration initialization failed")
+	}
+
 	handler, err := server.New(svc, server.Config{Origin: os.Getenv("SUPPLIER_PUBLIC_ORIGIN"), AdminOrigin: os.Getenv("SUPPLIER_ADMIN_ORIGIN"), InsecureLocalhost: os.Getenv("SUPPLIER_INSECURE_LOCALHOST") == "true", TrustedProxies: prefixes, StaticDir: os.Getenv("SUPPLIER_STATIC_DIR"), Finance: &finance.Service{Store: store, Vault: vault}, Accounts: accountService, Usage: usageService, Suppliers: supplierService, Admin: adminService})
 	if err != nil {
 		return err

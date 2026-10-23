@@ -28,6 +28,11 @@ export interface SupplierPage<T> {
 }
 
 const base = '/api/supplier/admin/v1'
+export interface SupplierGroupAccess { group_id: number; enabled: boolean; version: number }
+export const supplierGroupAPI = {
+  get: (id: number) => request<SupplierGroupAccess>('GET', `/groups/${id}/access`),
+  set: (id: number, enabled: boolean, version: number) => request<SupplierGroupAccess>('PUT', `/groups/${id}/access`, { enabled }, undefined, version)
+}
 async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, data?: unknown, key?: string, version?: number): Promise<T> {
   try {
     const response = await apiClient.request<T>({

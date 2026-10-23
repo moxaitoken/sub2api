@@ -1,5 +1,7 @@
 # 供应商模块架构方案
 
+> 分组接入与账号启用流程以 [2026-10-23 接入调整](group-access.md) 为准。
+
 日期：2026-10-22。版本：**Final PRD 1.0 / 精简方案 R2**。详细契约见 [首期详细设计](phase-1-technical-design.md)。
 
 需求以老板提供的《最终PRD.md》（Final 1.0，2026-10-21）与《最终版HTML交互原型.html》为准。PRD SHA256：`55781446f3666e6c5826e2edfd068ee26b706d38f51a85ace4ef16010323a93e`。参考代码：`deployment-supplier-plan` / `a0d8370a13243ffdb136a2522a082b4164b8c0ad`，以及当前未提交的供应商模块源码。

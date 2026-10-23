@@ -88,6 +88,7 @@ type OnboardingStore interface {
 	ClaimOnboarding(context.Context, BoundOAuth, string, string) (AccountOperation, bool, error)
 	CheckOnboarding(context.Context, BoundOAuth) error
 	ReserveLocalAccount(context.Context, BoundOAuth, string, string, string) (Account, error)
+	PrepareOnboarding(context.Context, BoundOAuth, AccountOperation, Account) (Account, error)
 	FinishOnboarding(context.Context, BoundOAuth, AccountOperation, Account, string, string) error
 	CancelOnboarding(context.Context, string, string) error
 }

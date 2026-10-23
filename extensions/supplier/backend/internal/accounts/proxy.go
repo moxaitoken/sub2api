@@ -153,13 +153,20 @@ func (s *Service) Groups(ctx context.Context) ([]ports.AccountGroup, error) {
 		return nil, e
 	}
 	out := []ports.AccountGroup{}
-	for _, id := range s.ApprovedGroups {
+	ids := s.ApprovedGroups
+	if s.GroupPolicies != nil {
+		ids, e = s.GroupPolicies.EnabledGroupIDs(ctx)
+		if e != nil {
+			return nil, e
+		}
+	}
+	for _, id := range ids {
 		g, e := up.AccountGroup(ctx, id)
 		if e != nil {
 			return nil, e
 		}
-		if g.ID != id || g.Platform != "anthropic" || g.Status != "active" || id == s.QuarantineID {
-			return nil, ports.ErrForbidden
+		if g.ID != id || g.Platform != "anthropic" || g.Status != "active" {
+			continue
 		}
 		out = append(out, g)
 	}
