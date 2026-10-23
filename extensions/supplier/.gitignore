@@ -1,0 +1,9 @@
+# Keep the supplier compatibility fixtures visible despite the root "tests" rule.
+!tests/
+!tests/compatibility/
+!tests/compatibility/**
+__pycache__/
+*.pyc
+/backend/supplier-server
+/backend/supplier-server.exe
+/backend/*.test
