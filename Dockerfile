@@ -41,6 +41,9 @@ RUN --mount=type=cache,id=sub2api-pnpm-store,target=/root/.local/share/pnpm/stor
 # Copy only that subtree to keep the build dependency minimal.
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
+COPY extensions/supplier/frontend/src/ /app/extensions/supplier/frontend/src/
+# Shared supplier components resolve the main frontend's locked Vue dependencies.
+RUN ln -s /app/frontend/node_modules /app/extensions/supplier/frontend/node_modules
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------

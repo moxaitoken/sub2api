@@ -1,0 +1,37 @@
+# Overlay ops/deployment/compose.production.yml using the existing sub2api project.
+services:
+  supplier:
+    image: ${SUPPLIER_IMAGE:?SUPPLIER_IMAGE is required}
+    pull_policy: never
+    container_name: sub2api-supplier
+    restart: unless-stopped
+    env_file:
+      - /opt/sub2api/supplier.env
+    ports:
+      - "127.0.0.1:8091:8091"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # A fixed private address allows the main app to trust only this adapter.
+    networks:
+      supplier_adapter:
+        ipv4_address: 172.30.91.3
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  sub2api:
+    networks:
+      default: {}
+      supplier_adapter:
+        ipv4_address: 172.30.91.2
+networks:
+  supplier_adapter:
+    ipam:
+      config:
+        - subnet: 172.30.91.0/29
