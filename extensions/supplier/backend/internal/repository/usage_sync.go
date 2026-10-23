@@ -124,24 +124,6 @@ func usageFingerprint(previous []byte, r ports.UsageRecord) []byte {
 	return h.Sum(nil)
 }
 
-func (s *Store) writeUsageRecord(ctx context.Context, tx *sql.Tx, a ports.UsageAccount, r ports.UsageRecord) error {
-	result, err := tx.ExecContext(ctx, `INSERT INTO supplier.supplier_usage_records(upstream_instance_id,upstream_usage_id,supplier_id,account_id,occurred_at,account_name_snapshot,requested_model,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,total_cost)
-	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-	 ON CONFLICT(upstream_instance_id,upstream_usage_id) DO UPDATE SET occurred_at=EXCLUDED.occurred_at,account_name_snapshot=EXCLUDED.account_name_snapshot,requested_model=EXCLUDED.requested_model,input_tokens=EXCLUDED.input_tokens,output_tokens=EXCLUDED.output_tokens,cache_read_tokens=EXCLUDED.cache_read_tokens,cache_creation_tokens=EXCLUDED.cache_creation_tokens,total_cost=EXCLUDED.total_cost,observed_at=now(),updated_at=now(),version=supplier.supplier_usage_records.version+1
-	 WHERE supplier.supplier_usage_records.supplier_id=EXCLUDED.supplier_id AND supplier.supplier_usage_records.account_id=EXCLUDED.account_id`, s.instanceID, r.ID, a.SupplierID, a.ID, r.OccurredAt, a.Name, r.Model, r.Input, r.Output, r.CacheRead, r.CacheWrite, r.Cost)
-	if err != nil {
-		return mapError(err)
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return ports.ErrConflict
-	}
-	return nil
-}
-
 func (s *Store) ApplyUsagePage(ctx context.Context, j ports.UsageJob, p ports.UsageSourcePage) error {
 	_, err := transaction(ctx, s.db, func(tx *sql.Tx) (bool, error) {
 		var pass, page int

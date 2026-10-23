@@ -88,7 +88,7 @@ func (s *Store) Settle(ctx context.Context, in ports.SettlementCommand) (ports.S
 	return out, replay, e
 }
 func (s *Store) Finance(ctx context.Context, q ports.FinanceQuery) (ports.FinanceReport, error) {
-	out := ports.FinanceReport{Items: []ports.Settlement{}, Page: q.Page, Size: q.Size, Overview: ports.FinanceOverview{Accrual: "not_configured"}}
+	out := ports.FinanceReport{Items: []ports.Settlement{}, Page: q.Page, Size: q.Size, Overview: ports.FinanceOverview{Accrual: "official_usd_v1"}}
 	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
 	if e != nil {
 		return out, e

@@ -184,6 +184,11 @@ func TestBackgroundUsageBackfill(t *testing.T) {
 	q.Period = "today"
 	force := func() {
 		t.Helper()
+		// These scenarios target one account/day. Keep completed unrelated jobs
+		// out of the bounded page budget as wall-clock retry intervals elapse.
+		if _, e := db.Exec(`UPDATE supplier.supplier_sync_cursors SET next_retry_at=now()+interval '1 hour' WHERE account_id<>$1 OR usage_date<>$2::date`, a, today.Format("2006-01-02")); e != nil {
+			t.Fatal(e)
+		}
 		_, e := db.Exec(`UPDATE supplier.supplier_sync_cursors SET next_retry_at=now() WHERE account_id=$1 AND usage_date=$2`, a, today.Format("2006-01-02"))
 		if e != nil {
 			t.Fatal(e)
@@ -234,6 +239,11 @@ func TestBackgroundUsageBackfill(t *testing.T) {
 	}
 	if err = s.RetryUsagePage(ctx, k); err != nil {
 		t.Fatal(err)
+	}
+	// Every projected standard-cost revision is booked once across both scan passes.
+	var balanced bool
+	if err = db.QueryRow(`SELECT (b.unsettled_cents::numeric+b.settled_cents)/100+b.accrual_remainder = (SELECT sum(u.total_cost) FROM supplier.supplier_usage_records u WHERE u.supplier_id=b.supplier_id) FROM supplier.supplier_balances b WHERE b.supplier_id=$1`, one.ID).Scan(&balanced); err != nil || !balanced {
+		t.Fatal("background accrual differs from exact retained standard usage", balanced, err)
 	}
 	t.Log("background only: 25 owned accounts, 3001 records/day, mixed customers, exact costs/tokens, page retry/restart, 41-day history, source revisions/gaps, tenant isolation and stale-lease fencing verified")
 }

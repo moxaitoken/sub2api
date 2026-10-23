@@ -52,6 +52,7 @@ func (s *Store) SyncUsageWindow(ctx context.Context, supplier string, a ports.Us
 		if id <= 0 || id != a.UpstreamID {
 			return false, ports.ErrForbidden
 		}
+		a.SupplierID = supplier
 		records, e := fetch(ctx)
 		if e != nil {
 			return false, e
@@ -68,16 +69,8 @@ func (s *Store) SyncUsageWindow(ctx context.Context, supplier string, a ports.Us
 			}
 			seen[r.ID] = true
 			ids = append(ids, r.ID)
-			result, e := tx.ExecContext(ctx, `INSERT INTO supplier.supplier_usage_records(upstream_instance_id,upstream_usage_id,supplier_id,account_id,occurred_at,account_name_snapshot,requested_model,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,total_cost)
-			 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-			 ON CONFLICT(upstream_instance_id,upstream_usage_id) DO UPDATE SET occurred_at=EXCLUDED.occurred_at,account_name_snapshot=EXCLUDED.account_name_snapshot,requested_model=EXCLUDED.requested_model,input_tokens=EXCLUDED.input_tokens,output_tokens=EXCLUDED.output_tokens,cache_read_tokens=EXCLUDED.cache_read_tokens,cache_creation_tokens=EXCLUDED.cache_creation_tokens,total_cost=EXCLUDED.total_cost,observed_at=now(),updated_at=now(),version=supplier.supplier_usage_records.version+1
-			 WHERE supplier.supplier_usage_records.supplier_id=EXCLUDED.supplier_id AND supplier.supplier_usage_records.account_id=EXCLUDED.account_id`, s.instanceID, r.ID, supplier, a.ID, r.OccurredAt, a.Name, r.Model, r.Input, r.Output, r.CacheRead, r.CacheWrite, r.Cost)
-			if e != nil {
+			if e = s.writeUsageRecord(ctx, tx, a, r); e != nil {
 				return false, e
-			}
-			n, e := result.RowsAffected()
-			if e != nil || n != 1 {
-				return false, ports.ErrConflict
 			}
 		}
 		for day := start; day.Before(end); day = day.AddDate(0, 0, 1) {

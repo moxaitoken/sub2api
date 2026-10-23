@@ -40,7 +40,7 @@ onUnmounted(() => { generation++; ownerGeneration++ })
       <div class="card p-5"><p>{{ t('supplierAdmin.unsettled') }}</p><strong class="text-2xl">{{ report?.overview.unsettled_usd ?? '—' }}</strong></div>
       <div class="card p-5"><p>{{ t('supplierAdmin.settled') }}</p><strong class="text-2xl">{{ report?.overview.settled_usd ?? '—' }}</strong></div>
       <div class="card p-5"><p>{{ t('supplierAdmin.settlementCount') }}</p><strong class="text-2xl">{{ report?.overview.settlement_count ?? '—' }}</strong></div>
-      <div class="card p-5"><p>{{ t('supplierAdmin.accrual') }}</p><strong>{{ t('supplierAdmin.accrualPending') }}</strong></div>
+      <div class="card p-5"><p>{{ t('supplierAdmin.accrual') }}</p><strong>{{ report ? t(report.overview.accrual_status === 'official_usd_v1' ? 'supplierAdmin.accrualActive' : 'supplierAdmin.accrualPending') : '—' }}</strong></div>
     </section>
     <section class="card p-5">
       <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="load(1)">

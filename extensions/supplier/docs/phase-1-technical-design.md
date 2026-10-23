@@ -56,10 +56,10 @@ sessions需前向调整旧“依赖member_id/upstream_user_id”的约束，允�
 | 表 | 关键字段 | 约束与用途 |
 | --- | --- | --- |
 | `supplier_proxy_grants` | proxy_id、grantee_supplier_id、can_use、expires_at、version | UNIQUE(proxy_id,grantee_supplier_id)；保留PRD既有授权可见性，无共享管理菜单；默认私有 |
-| `supplier_balances` | supplier_id PK、currency=USD、unsettled_cents、settled_cents、accrual_remainder numeric(30,12)、version | 整数美分，非负且算术防溢出；新供应商余额/余数全0，总消耗余额由两者求和 |
+| `supplier_balances` | supplier_id PK、currency=USD、unsettled_cents、settled_cents、accrual_remainder numeric(38,18)、version | 整数美分，非负且算术防溢出；新供应商余额/余数全0，总消耗余额由两者求和 |
 | `supplier_settlements` | id/全局唯一settlement_no、supplier_id、amount_cents、method、reference/note、status=completed、key/hash、before/after、实际操作者和名称快照 | amount>0、method白名单；操作者/动作/key唯一，hash包含目标supplier；只读，不提供撤销/编辑 |
 | `supplier_ledger_entries` | id/全局唯一ledger_no、settlement_id、supplier_id、delta_cents、before/after、currency、actual_actor、created_at | settlement_id UNIQUE/FK；delta=-amount，after=before+delta；与结算同事务、同金额/供应商 |
-| `supplier_accrual_events` | supplier_id、usage_key/source_revision、pricing_revision、rule_snapshot/hash、exact_amount/delta、posted_cents、remainder、created_at | 规则明确后才实施；唯一来源/修订/规则事件，append-only，可追溯采购应付；不新增费率管理页面 |
+| `supplier_accrual_events` | supplier_id/account_id、upstream_instance_id/upstream_usage_id/source_version、rule_revision、origin、previous_cost/standard_cost/exact_delta、posted_cents、before_cents/after_cents、remainder_before/remainder_after、created_at | 010已实现；来源/修订/规则唯一，关联来源记录和账号归属，精确记录差额与结余；不新增费率管理页面 |
 
 用量/计提用 `numeric(30,12)` 或等价精确decimal，结算金额用整数美分；API金额全部十进制字符串，禁止二进制浮点累计和逐请求截两位小数。费率配置初期采用受控、带版本的明确规则，快照写入计提事件；不先建规则引擎/费率表。存量开账用另行批准的核验文件、幂等导入脚本和审计，不预建开账批次系统。
 
@@ -264,7 +264,7 @@ COMMIT
 
 余额、结算、流水、审计任一步失败同事务回滚；结算入口集中为一个service事务方法，数据库FK/unique/check和故障注入测试防孤立记录，不增加存储过程/触发器层。计提与结算共锁balance，统一锁顺序（幂等→balance→子行），不因并发丢增量或超扣。
 
-例：4280.60/1200.00/5480.60登记100后4180.60/1300.00/5480.60。总消耗余额为采购应付累计，不等于官方价。网络超时查原key或用原key重试；前端禁重复点击不代替幂等。金额变化不足返最新余额，保留输入、不自动改小。历史“银行转账”标签只读原样保留，不强行映射新枚举。误登记无日常撤销/冲正/余额调整，需业务确认受控修复办法。
+例：4280.60/1200.00/5480.60登记100后4180.60/1300.00/5480.60。总消耗余额为按官方标准消耗1:1累计的采购应付（可结算美分部分）；零头另行精确保留。网络超时查原key或用原key重试；前端禁重复点击不代替幂等。金额变化不足返最新余额，保留输入、不自动改小。历史“银行转账”标签只读原样保留，不强行映射新枚举。误登记无日常撤销/冲正/余额调整，需业务确认受控修复办法。
 
 ### 4.6 后台任务与失败恢复
 
@@ -327,13 +327,13 @@ usage_records保存脱敏读取模型，sync_cursors保存逐账号进度。主�
 - 配额保留5h/7d/Fable，显示阈值<90/90–<99/>=99；模型窗口满不代表整号不可调度。Fable映射、reset_at必须有真实来源，不猜模型或恢复时间。
 - 账号详情用量all/today影响该区，固定5h/7d/30d快照独立；模型分布和匿名API来源不泄客户/Key。全平台仅独立白名单聚合，不能下钻/任意过滤推断他人资源。
 
-### 5.4 采购应付：简单规则，先确认再实现
+### 5.4 采购应付：官方标准消耗 1:1 USD
 
-**未确认计提规则前禁止生产计提，不默认费率1。** PRD11仍需明确基数/费率来源、模型/账号维度、失败和重试、时点/生效、舍入余数、迟到/重复、存量开账及误登记修复。
+已确认采用主站用量记录 `total_cost` 按官方原价 1:1 计提，与用户分组倍率及实扣金额无关。主站提供哪些标准消耗记录，就按这些记录及其修订计提；不另行推算失败/重试费用。保留18位美元精度，余数结转，结算只使用整美分。
 
-确定后只实现实际需要的版本化计算函数/受控配置：按事件发生时的规则精确计算→在balance锁内检查唯一来源修订→写不可变rule_snapshot与计提事件→合并高精度余数并按已确认规则转美分→更新未结算。重复输入不重复计提；源修订采用已确认差额规则，不覆盖既往事件。不为尚未提出的多币种/促销/阶梯等设计引擎。
+两条同步入口共用 `repository.writeUsageRecord`，在原事务内锁定供应商余额，更新来源投影，按标准消耗新旧差额追加 `official_usd_v1` 事件，合并余数并更新未结算。来源/修订/规则唯一；重复同步不重复计提。010对已有投影补录一次，保留既有开账余额和已结算记录。不新增费率配置、存储过程或通用计价引擎。
 
-已结清后迟到负修正可能超过剩余未结算，不能造负余额或擅自扣历史已结算；进入待核对，业务确认追索/结转方式后受控处理。开账必须有独立批准、来源哈希、逐供应商核验和审计，不能用余额调整菜单代替。未定项不影响先用合成数据验收结算事务，但不能宣布财务可生产上线。
+历史负修正若导致应付低于已结算，则拒绝并回滚该次来源、计提事件和余额更新，保留原账及同步重试状态；不自动改写已结算。生产应用仍需迁移前备份和逐供应商核账；本轮只在隔离数据库和本地环境验证，不能据此宣布生产财务已上线。
 
 ## 6. 验收用例
 
@@ -418,3 +418,17 @@ usage_records保存脱敏读取模型，sync_cursors保存逐账号进度。主�
 ### 本地主站管理与财务实施边界（2026-10-23）
 
 三个管理业务详情复用供应商门户视图、资源处理器和业务服务；只增加固定目标与管理员操作人上下文。已实现结算登记与只读流水，实际增量SQL为009：006余额表 + 结算快照表 + 唯一结算关联流水表。为避免重复财务字段，流水通过结算唯一关联读取金额/前后余额；无付款网关、调账、撤销、计提规则或对主库的直接访问。接口、事务、未知结果重试与回退边界以 [主站供应商管理接入](main-admin-integration.md) 的本轮授权节为准。历史方案中的未实现采购计提表不作为已部署能力。
+
+
+### 官方原价计提落地（2026-10-23）
+
+用户确认官方标准消耗1:1作为供应商应付；分组倍率仅影响用户实际扣费。示例：标准消耗20 USD、倍率0.5，用户支付10 USD，供应商应付仍是20 USD。授权仅限代码及本地隔离验证，不发布生产。
+
+- 沿用主站 usage 的 `total_cost` 和原始输入/输出/缓存Token，不读 `actual_cost`、不乘 `rate_multiplier` 或 `account_rate_multiplier`，不重新套用当前价覆盖历史价。
+- 010只在供应商库扩充余数精度及 `supplier_accrual_events`，001–009保持原校验和。历史已同步记录逐条按0→标准消耗补录一次，保留原有余额与已结算额；再次迁移和同步不重复记账。使用来源保留范围内已有/后台补齐的用量，不构造缺失数据。
+- 两条既有用量落库路径统一调用 repository `writeUsageRecord`。同一事务先锁供应商balance，再核对并写来源行、记录精确差额事件、更新balance。标准费用相同的重复扫描不新增计提事件。没有新增后台服务、存储函数或业务触发器。
+- 金额使用numeric(38,18)，结转余数单位USD。`exact = remainder + new_cost - previous_cost`，`posted_cents = floor(exact*100)`；余额增加posted_cents，余数为`exact-posted_cents/100`，始终在[0,0.01)。结算仍是正整数美分，余数不清空。显示的总消耗=未结算+已结算，原始标准消耗还包括未满美分的余数。
+- 上游修正按来源行版本和新旧标准费用差额记账；来源归属不得更换。余额下溢、金额上溢、事件写入失败均回滚整个用量页/窗口；后台保留重试/未完成对账状态，不修改已完成结算或把余额截断为0。
+- 计提和结算共锁balance，防并发丢增量和超扣。计提事件记录来源、修订、规则official_usd_v1、原/新费用、差额、入账美分、前后余额与余数；现有财务页流水仍为线下付款结算流水，采购计提追溯记录保存在模块库。
+- 验证覆盖20→20、倍率隔离、重复/二遍同步、18位小数跨美分、历史补录、修正/下溢、超大金额、跨供应商归属、事件失败回滚和计提/结算并发。真实Claude非零用量仍需实际账号验收。
+- 回退：上线前备份供应商库；010后旧二进制会拒绝未知迁移，不能只退旧程序。恢复匹配的程序和迁移前备份，或使用保留010读写能力的修复版本；不得直接删财务事件或编辑历史SQL。代码副本回滚验证不等于财务数据冲正。
