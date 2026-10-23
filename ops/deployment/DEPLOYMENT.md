@@ -82,3 +82,10 @@ curl --fail -H 'Host: gomoai.ai' http://127.0.0.1/health
 配置回滚脚本只还原指定的配置副本，不会变更云数据库或撤销迁移。首次上线没有旧业务实例可切回。
 
 Caddy 启用前的环境与配置备份位于 ECS `/opt/sub2api/backups/ingress-20261021/`（仅 root 可读）。其中 `ROLLBACK-ingress.sh` 停止并禁用 Caddy、还原先前运行环境并重建同镜像应用，恢复私有入口；不回滚数据库、DNS 或云安全组。只在确认需要退回私有状态时执行。文件副本回滚验证不等于已在生产执行整体回滚。
+
+
+## home-20261023-171656
+
+用户授权将最新提交 `cf569d288156af7e4bf891d544ef7d5ec16ae21c` 部署至现有ECS。对比上一线上源码仅首页默认页脚移除GitHub链接，文档与版权保留。只更新主站镜像 `sub2api-local:home-20261023-171656`；供应商容器ID、镜像及Caddy路由保持不变，env仅SUB2API_IMAGE变更，无迁移/依赖/权限调整。主站构建含i18n/类型检查，首页聚焦测试及同输入BASELINE→MODIFIED→ROLLBACK副本测试通过（旧版/回滚版GitHub缺失断言预期失败，新版通过，回滚源hash一致）。
+
+备份及主站镜像回退：`/opt/sub2api/releases/home-20261023-171656/before`、`/opt/sub2api/releases/home-20261023-171656/ROLLBACK.sh`。两库备份在无网络临时PG中实际恢复校验；回退脚本仅syntax及env副本实际测试，未为测试回退生产。线上健康、主站管理员登录及供应商管理读取、未登录401、首页静态chunk通过；浏览器验收未执行。供应商服务未重启，数据库记录及现有密钥不变。
