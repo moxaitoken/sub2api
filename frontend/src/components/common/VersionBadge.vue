@@ -114,8 +114,28 @@
                 </p>
               </div>
 
+              <!-- Fork releases are rebuilt from our repository, never replaced in-place. -->
+              <div v-if="!inPlaceUpdatesEnabled" class="space-y-2">
+                <p v-if="hasUpdate" class="text-sm text-amber-700 dark:text-amber-400">
+                  {{ t('version.updateAvailable') }} v{{ latestVersion }}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-dark-400">
+                  {{ t('version.forkUpgradeHint') }}
+                </p>
+                <a
+                  v-if="releaseInfo?.html_url && releaseInfo.html_url !== '#'"
+                  :href="releaseInfo.html_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center justify-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200"
+                >
+                  {{ t('version.viewChangelog') }}
+                  <Icon name="externalLink" size="xs" :stroke-width="2" />
+                </a>
+              </div>
+
               <!-- Priority 1: Update error (must check before hasUpdate) -->
-              <div v-if="updateError" class="space-y-2">
+              <div v-else-if="updateError" class="space-y-2">
                 <div
                   class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/50 dark:bg-red-900/20"
                 >
@@ -656,6 +676,9 @@ const GITHUB_REPO = 'Wei-Shaw/sub2api'
 const DOCKER_IMAGE = 'weishaw/sub2api'
 
 const { t } = useI18n()
+
+// Keep upstream UI code isolated; this fork only supports tested image deployments.
+const inPlaceUpdatesEnabled = false
 
 const props = defineProps<{
   version?: string

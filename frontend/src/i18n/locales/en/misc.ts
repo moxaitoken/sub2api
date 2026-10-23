@@ -31,6 +31,7 @@ export default {
     refresh: 'Refresh',
     sourceMode: 'Source Build',
     sourceModeHint: 'Source build, use git pull to update',
+    forkUpgradeHint: 'Custom version: merge upstream changes into our repository, test, then deploy a rebuilt image. Online updates and rollbacks are disabled.',
     updateNow: 'Update Now',
     updating: 'Updating...',
     updateComplete: 'Update Complete',
