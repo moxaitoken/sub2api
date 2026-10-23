@@ -18,7 +18,7 @@ async function view(extra: Response[] = [], config:unknown = options) {
   const wrapper = mount(AccountOnboardingView,{props:{client},global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
   await flushPromises();return {wrapper,fetcher,client}
 }
-afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks()})
+afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals()})
 describe('manual supplier account onboarding',()=>{
  it('keeps a failed new proxy in its form without selecting it or allowing OAuth',async()=>{
   const {wrapper:w,fetcher:f}=await view([ok({...proxy,status:'disabled'})],{...options,proxies:[]})
@@ -49,10 +49,10 @@ describe('manual supplier account onboarding',()=>{
   expect(w.get('a').attributes('href')).toBe(authorization.authorization_url)
   expect(w.get('a').attributes('rel')).toBe('noopener noreferrer')
   expect(w.find('select').exists()).toBe(false)
-  await w.get('textarea').setValue('secret-code#fixture')
+  await w.get('textarea:not([readonly])').setValue('secret-code#fixture')
   const storage=vi.spyOn(Storage.prototype,'setItem')
   await w.get('form').trigger('submit')
-  expect((w.get('textarea').element as HTMLTextAreaElement).value).toBe('')
+  expect((w.get('textarea:not([readonly])').element as HTMLTextAreaElement).value).toBe('')
   await flushPromises();expect(w.text()).toContain('Account added');expect(w.text()).toContain('enabled after validation');expect(w.emitted('created')).toHaveLength(1);expect(storage).not.toHaveBeenCalled();w.unmount()
  })
  it('cancels an unconsumed authorization when the user closes the dialog',async()=>{
@@ -78,8 +78,46 @@ describe('manual supplier account onboarding',()=>{
  it('keeps an unknown outcome visible without generating a new session or replaying a code',async()=>{
   const {wrapper:w,fetcher:f}=await view([ok(authorization),ok({id:'operation-unknown',action:'oauth.complete',state:'needs_attention',step:'account_create_unknown'})])
   await w.findAll('select')[1].setValue(proxy.id);await w.findAll('button').find(b=>b.text()==='Generate authorization link')!.trigger('click');await flushPromises()
-  await w.get('textarea').setValue('secret-code#fixture');await w.get('form').trigger('submit');await flushPromises()
-  expect(w.text()).toContain('Result needs checking');expect(w.emitted('created')).toBeUndefined();expect(w.find('textarea').exists()).toBe(false)
+  await w.get('textarea:not([readonly])').setValue('secret-code#fixture');await w.get('form').trigger('submit');await flushPromises()
+  expect(w.text()).toContain('Result needs checking');expect(w.emitted('created')).toBeUndefined();expect(w.find('textarea:not([readonly])').exists()).toBe(false)
   expect(f).toHaveBeenCalledTimes(4);w.unmount()
+ })
+})
+
+describe('copy the existing official authorization link across browsers', () => {
+ async function authorizedView() {
+  const result = await view([ok(authorization)])
+  await result.wrapper.findAll('select')[1].setValue(proxy.id)
+  await result.wrapper.findAll('button').find(b => b.text() === 'Generate authorization link')!.trigger('click')
+  await flushPromises()
+  return result
+ }
+ it('shows the complete readonly URL and copies exactly that URL without creating a new session', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { clipboard: { writeText } })
+  const {wrapper:w,fetcher:f} = await authorizedView()
+  const link = w.get('textarea[readonly]')
+  expect((link.element as HTMLTextAreaElement).value).toBe(authorization.authorization_url)
+  expect(w.text()).toContain('browser where your Claude account is signed in')
+  const requests = f.mock.calls.length
+  await w.findAll('button').find(b => b.text() === 'Copy authorization link')!.trigger('click')
+  await flushPromises()
+  expect(writeText).toHaveBeenCalledWith(authorization.authorization_url)
+  expect(w.text()).toContain('Authorization link copied')
+  expect(w.get('a').attributes('href')).toBe(authorization.authorization_url)
+  expect(f).toHaveBeenCalledTimes(requests)
+  w.unmount()
+ })
+ it.each(['missing', 'denied'])('offers manual copying when clipboard access is %s', async mode => {
+  const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+  vi.stubGlobal('navigator', mode === 'missing' ? {} : { clipboard: { writeText } })
+  const {wrapper:w,fetcher:f} = await authorizedView()
+  await w.findAll('button').find(b => b.text() === 'Copy authorization link')!.trigger('click')
+  await flushPromises()
+  expect(w.text()).toContain('Select or long-press the link to copy it manually')
+  expect(w.text()).not.toContain('Authorization link copied')
+  expect((w.get('textarea[readonly]').element as HTMLTextAreaElement).value).toBe(authorization.authorization_url)
+  expect(f).toHaveBeenCalledTimes(3)
+  w.unmount()
  })
 })

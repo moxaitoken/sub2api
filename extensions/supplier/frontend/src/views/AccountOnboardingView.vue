@@ -12,6 +12,8 @@ const { t } = useSupplierI18n()
 const options = ref<OnboardingOptions>({ groups: [], proxies: [] }), loading = ref(true), busy = ref(false), error = ref<unknown>(null)
 const name = ref(''), group = ref(0), source = ref('existing'), proxyID = ref(''), code = ref(''), advanced = ref(false)
 const authorization = ref<Authorization | null>(null), operation = ref<AccountOperation | null>(null), submitted = ref(false)
+const authorizationUrlInput = ref<HTMLTextAreaElement | null>(null)
+const copying = ref(false), copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 const beginKey = ref(crypto.randomUUID()), completeKey = ref(crypto.randomUUID())
 const eligible = computed(() => options.value.proxies.filter(p => p.status === 'active' && p.accounts + p.held < p.capacity))
 const canBegin = computed(() => !loading.value && !busy.value && group.value > 0 && (source.value === 'auto' ? eligible.value.length > 0 : source.value === 'existing' && eligible.value.some(p => p.id === proxyID.value)))
@@ -29,6 +31,22 @@ async function begin() {
   try { const data = await props.client.beginOnboarding(name.value.trim(), source.value === 'auto' ? '' : proxyID.value, group.value, beginKey.value); if (alive) authorization.value = data }
   catch (cause) { if (alive) error.value = cause }
   finally { if (alive) busy.value = false }
+}
+async function copyAuthorizationLink() {
+  const url = authorization.value?.authorization_url
+  if (!url || copying.value) return
+  copying.value = true; copyState.value = 'idle'
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+    await navigator.clipboard.writeText(url)
+    if (alive) copyState.value = 'copied'
+  } catch {
+    if (alive) {
+      copyState.value = 'failed'
+      authorizationUrlInput.value?.focus()
+      authorizationUrlInput.value?.select()
+    }
+  } finally { if (alive) copying.value = false }
 }
 function showResult(result: AccountOperation) {
   operation.value = result
@@ -82,6 +100,12 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = '' })
       <template v-else-if="authorization">
         <div class="authorization-summary"><b>{{ t('onboarding.parametersLocked') }}</b><small>{{ t('onboarding.expires') }} {{ new Date(authorization.expires_at).toLocaleString() }}</small></div>
         <a class="authorization-link" :href="authorization.authorization_url" target="_blank" rel="noopener noreferrer">{{ t('accounts.openOfficial') }} ↗</a>
+        <div class="onboarding-form">
+          <label>{{ t('onboarding.authorizationUrl') }}<textarea ref="authorizationUrlInput" class="authorization-url" :value="authorization.authorization_url" readonly rows="3" autocomplete="off" spellcheck="false" /></label>
+          <button type="button" :disabled="copying" @click="copyAuthorizationLink">{{ t('onboarding.copyLink') }}</button>
+          <p v-if="copyState !== 'idle'" role="status" class="onboarding-hint">{{ t(copyState === 'copied' ? 'onboarding.linkCopied' : 'onboarding.copyLinkFailed') }}</p>
+          <p class="onboarding-hint">{{ t('onboarding.crossBrowserHint') }}</p>
+        </div>
         <p class="onboarding-hint">{{ t('onboarding.codeHint') }}</p>
         <form v-if="!operation" class="onboarding-form" @submit.prevent="complete"><label>{{ t('onboarding.callback') }}<textarea v-model="code" required maxlength="8192" autocomplete="off" spellcheck="false" :disabled="busy" /></label><button class="primary" :disabled="busy || !code.trim()">{{ t(busy ? 'auth.submitting' : 'onboarding.finish') }}</button></form>
         <div v-if="operation" class="onboarding-result" :class="operation.state" role="status"><b>{{ t(`onboarding.results.${operation.state}`) }}</b><p>{{ t(operation.state === 'succeeded' ? 'onboarding.createdRunning' : 'onboarding.noReplay') }}</p><small>{{ t('onboarding.operationID') }} {{ operation.id }}</small></div>
@@ -91,3 +115,6 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = '' })
     </div>
   </PortalDialog>
 </template>
+<style scoped>
+.authorization-url { width: 100%; box-sizing: border-box; padding: 9px 11px; color: inherit; background: transparent; border: 1px solid #9fc6cc; border-radius: 7px; overflow-wrap: anywhere; resize: vertical; }
+</style>
