@@ -48,7 +48,7 @@ func (s *Server) registerIdentityRoutes(mux *http.ServeMux) {
 		if _, err := s.cfg.Suppliers.Store.ManagedSupplier(r.Context(), id); err != nil {
 			return err
 		}
-		return s.identityAccounts(w, r, id)
+		return s.identityAccounts(w, r.WithContext(ports.WithAdminActor(r.Context(), p.Me.User.ID)), id)
 	}))
 }
 func (s *Server) localLogin(w http.ResponseWriter, r *http.Request) {

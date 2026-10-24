@@ -4,6 +4,14 @@ import { errorKey } from '../errorText'
 import { identity, success } from './fixtures'
 
 describe('supplier API client', () => {
+  it('accepts optional status synchronization metadata and rejects unknown values', async () => {
+    const account = { id:'owned',name:'Fixture',admission_state:'approved',desired_state:'running',version:2,observed_at:null,state_sync:'synced' }
+    const transport=vi.fn<typeof fetch>().mockImplementation(async()=>success({items:[account],total:1}))
+    const client=new SupplierClient(vi.fn(),transport)
+    expect((await client.accounts()).items[0].state_sync).toBe('synced')
+    account.state_sync='private-upstream-error'
+    await expect(client.accounts()).rejects.toMatchObject({reason:'INVALID_RESPONSE'})
+  })
   it('requests scoped optional metrics and accepts legacy accounts without them', async () => {
     const account = { id: 'owned', name: 'Fixture', admission_state: 'approved', desired_state: 'running', version: 1, observed_at: null }
     const transport = vi.fn<typeof fetch>().mockResolvedValue(success({ items: [account], total: 1 }))

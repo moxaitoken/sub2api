@@ -11,6 +11,21 @@ const second: SupplierAccount = { ...first, id: 'fixture-2', name: 'Beta Claude'
 const view = (props = {}) => mount(SupplierWorkspaceView, { props: { tab: 'accounts', accounts: [first, second], total: 42, page: 1, pages: 3, loading: false, failed: false, updatedAt: '', ...props }, global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { zh, en } })] } })
 
 describe('supplier prototype business pages', () => {
+  it('renders refreshed upstream states and marks failures as last known, in rows and details', async () => {
+    const w = view({accounts:[{...first,admission_state:'needs_attention',desired_state:'paused',state_sync:'failed'}]})
+    expect(w.get('tbody').text()).toContain(en.workspace.stateSyncFailed)
+    await w.get('button[aria-label="Account details Alpha Claude"]').trigger('click')
+    expect(w.get('[role=dialog]').text()).toContain(en.workspace.stateSyncFailed)
+    await w.get('[role=dialog]').trigger('keydown',{key:'Escape'})
+    await w.setProps({accounts:[{...first,admission_state:'approved',desired_state:'running',state_sync:'synced'}]})
+    expect(w.get('tbody').text()).toContain('Approved')
+    expect(w.get('tbody').text()).toContain('Running')
+    expect(w.get('tbody').text()).not.toContain(en.workspace.stateSyncFailed)
+    await w.setProps({accounts:[{...first,admission_state:'approved',desired_state:'paused',state_sync:'pending'}]})
+    expect(w.get('tbody').text()).toContain('Paused')
+    expect(w.get('tbody').text()).toContain(en.workspace.stateSyncPending)
+    w.unmount()
+  })
   it('renders exact costs and configuration in rows and details, never as live metrics', async () => {
     const metrics = { configuration: { concurrency_limit: 23, priority: 0 }, consumption: { today_cost_usd: '0', total_cost_usd: '0.300000000000000001', today_status: 'complete', total_status: 'partial', observed_at: '2026-10-24T12:00:00+08:00' } }
     const w = view({ accounts: [{ ...first, metrics }] })

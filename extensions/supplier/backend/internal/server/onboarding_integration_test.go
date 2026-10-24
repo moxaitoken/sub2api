@@ -446,6 +446,43 @@ func TestR2LocalOnboarding(t *testing.T) {
 		t.Fatal("metrics crossed supplier scope")
 	}
 	// Unknown external create must keep its reservation/account fence and never replay.
+	// A main-site administrator repairs an account outside the supplier workflow.
+	if _, e = db.Exec(`UPDATE supplier.supplier_accounts SET admission_state='needs_attention',desired_state='paused',version=version+1 WHERE id=$1`, items[0].ID); e != nil {
+		t.Fatal(e)
+	}
+	w = call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, c1, "", "")
+	data = want(w, 200)
+	json.Unmarshal(data["items"], &projected)
+	if len(projected) != 1 || projected[0].Admission != "approved" || projected[0].Desired != "running" || projected[0].StateSync != "synced" {
+		t.Fatal("main repair not mirrored", w.Body.String())
+	}
+	mu.Lock()
+	remoteRow := remoteAccounts[items[0].UpstreamID]
+	remoteRow.Schedulable = false
+	remoteAccounts[remoteRow.ID] = remoteRow
+	mu.Unlock()
+	w = call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, c1, "", "")
+	data = want(w, 200)
+	json.Unmarshal(data["items"], &projected)
+	if projected[0].Admission != "approved" || projected[0].Desired != "paused" {
+		t.Fatal("main pause not mirrored", w.Body.String())
+	}
+	persisted, e := store.Account(ctx, first.ID, items[0].ID)
+	if e != nil || persisted.Desired != "paused" {
+		t.Fatal("state response not persisted", persisted, e)
+	}
+	mu.Lock()
+	delete(remoteAccounts, remoteRow.ID)
+	mu.Unlock()
+	w = call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, c1, "", "")
+	data = want(w, 200)
+	json.Unmarshal(data["items"], &projected)
+	if projected[0].StateSync != "failed" || projected[0].Admission != "approved" || projected[0].Desired != "paused" {
+		t.Fatal("read failure hid stale state", w.Body.String())
+	}
+	mu.Lock()
+	remoteAccounts[remoteRow.ID] = remoteRow
+	mu.Unlock()
 	w = call("POST", "/api/supplier/v1/proxies", ports.ProxyInput{Name: "Second proxy", Address: "8.8.4.4:8080", Region: "SG"}, c1, csrf1, key())
 	data = want(w, 201)
 	var secondProxy string

@@ -145,7 +145,8 @@ export class SupplierClient {
       data.items.some(item => !item || typeof item.id !== 'string' || typeof item.name !== 'string' ||
         !Number.isSafeInteger(item.version) || item.version < 1 ||
         !['provisioning', 'identity_pending', 'pending', 'approved', 'rejected', 'blocked', 'deleting', 'deleted', 'needs_attention'].includes(item.admission_state) ||
-        !['paused', 'running'].includes(item.desired_state) || !this.validMetrics(item.metrics))) throw new ApiError(200, 'INVALID_RESPONSE')
+        !['paused', 'running'].includes(item.desired_state) ||
+        (item.state_sync !== undefined && !['synced','failed','pending'].includes(item.state_sync)) || !this.validMetrics(item.metrics))) throw new ApiError(200, 'INVALID_RESPONSE')
     return data
   }
 

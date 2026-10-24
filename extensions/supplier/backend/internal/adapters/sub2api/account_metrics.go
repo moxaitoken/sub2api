@@ -20,6 +20,8 @@ func (c *AccountClient) AccountConfiguration(ctx context.Context, id int64) (por
 		Type        string `json:"type"`
 		Concurrency *int   `json:"concurrency"`
 		Priority    *int   `json:"priority"`
+		Status      string `json:"status"`
+		Schedulable *bool  `json:"schedulable"`
 	}
 	if err := c.call(ctx, "GET", "/api/v1/admin/accounts/"+strconv.FormatInt(id, 10), nil, &out, ""); err != nil {
 		return zero, err
@@ -27,5 +29,9 @@ func (c *AccountClient) AccountConfiguration(ctx context.Context, id int64) (por
 	if out.ID != id || out.Platform != "anthropic" || out.Type != "oauth" || out.Concurrency == nil || *out.Concurrency < 1 || out.Priority == nil || *out.Priority < 0 {
 		return zero, badResponse()
 	}
-	return ports.AccountConfiguration{ConcurrencyLimit: *out.Concurrency, Priority: *out.Priority}, nil
+	value := ports.AccountConfiguration{ConcurrencyLimit: *out.Concurrency, Priority: *out.Priority}
+	if out.Schedulable != nil && (out.Status == "active" || out.Status == "inactive" || out.Status == "error") {
+		value.State = &ports.AccountObservation{Status: out.Status, Schedulable: *out.Schedulable}
+	}
+	return value, nil
 }

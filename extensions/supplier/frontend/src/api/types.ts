@@ -30,6 +30,7 @@ export interface SupplierAccount {
   desired_state: 'paused' | 'running'
   observed_at: string | null
   version: number
+  state_sync?: 'synced' | 'failed' | 'pending'
   metrics?: {
     configuration: { concurrency_limit: number; priority: number } | null
     consumption: { today_cost_usd: string | null; total_cost_usd: string | null; today_status: 'complete' | 'partial'; total_status: 'complete' | 'partial'; observed_at: string } | null

@@ -128,6 +128,8 @@ export default {
   "costHint": "Official standard-price synced usage: today in Asia/Shanghai and all retained history. Not discounted customer charges or supplier balance.",
   "syncingCosts": "Syncing / not reconciled",
   "costSnapshot": "Cost queried at",
+  "stateSyncFailed": "Status sync failed; showing last known state",
+  "stateSyncPending": "Status sync pending; showing last known state",
   "accountDetails": "Account details",
   "loadingAccounts": "Loading accounts…",
   "accountsFailed": "Could not load accounts",

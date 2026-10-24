@@ -2,13 +2,15 @@ package accounts
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 )
 
-// EnrichAccounts preserves pagination and base account reads on metric failures.
+// EnrichAccounts mirrors owned upstream state and enriches cached metrics.
+// Read/synchronization failures preserve the base row with an explicit marker.
 // Ownership is resolved by the existing list query, never by browser upstream IDs.
 // At most four upstream reads run concurrently, within one four-second budget.
 func (s *Service) EnrichAccounts(ctx context.Context, supplier string, rows []ports.Account) {
@@ -18,8 +20,10 @@ func (s *Service) EnrichAccounts(ctx context.Context, supplier string, rows []po
 	ids := make([]string, 0, len(rows))
 	for i := range rows {
 		rows[i].Metrics = &ports.AccountMetrics{}
+		rows[i].StateSync = "pending"
 		if rows[i].SupplierID == supplier && rows[i].UpstreamID > 0 {
 			ids = append(ids, rows[i].ID)
+			rows[i].StateSync = "failed"
 		}
 	}
 	if store, ok := s.Store.(ports.AccountConsumptionStore); ok && len(ids) > 0 {
@@ -62,6 +66,16 @@ func (s *Service) EnrichAccounts(ctx context.Context, supplier string, rows []po
 				value, err := source.AccountConfiguration(readCtx, rows[i].UpstreamID)
 				if err == nil {
 					rows[i].Metrics.Configuration = &value
+					if store, ok := s.Store.(ports.AccountObservationStore); ok && value.State != nil {
+						updated, syncErr := store.ObserveAccount(readCtx, supplier, rows[i], *value.State)
+						if syncErr == nil {
+							updated.Metrics = rows[i].Metrics
+							updated.StateSync = "synced"
+							rows[i] = updated
+						} else if errors.Is(syncErr, ports.ErrConflict) {
+							rows[i].StateSync = "pending"
+						}
+					}
 				}
 			}
 		}()

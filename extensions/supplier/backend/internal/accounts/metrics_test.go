@@ -31,6 +31,7 @@ type metricRemote struct {
 	max    atomic.Int32
 	calls  atomic.Int32
 	fail   bool
+	state  *ports.AccountObservation
 }
 
 func (r *metricRemote) AccountConfiguration(ctx context.Context, id int64) (ports.AccountConfiguration, error) {
@@ -50,7 +51,59 @@ func (r *metricRemote) AccountConfiguration(ctx context.Context, id int64) (port
 	if r.fail {
 		return ports.AccountConfiguration{}, ports.ErrUnavailable
 	}
-	return ports.AccountConfiguration{ConcurrencyLimit: int(id), Priority: 0}, nil
+	return ports.AccountConfiguration{ConcurrencyLimit: int(id), Priority: 0, State: r.state}, nil
+}
+
+type observationMemory struct {
+	*memory
+	err    error
+	writes int
+}
+
+func (m *observationMemory) ObserveAccount(_ context.Context, supplier string, a ports.Account, state ports.AccountObservation) (ports.Account, error) {
+	if supplier != a.SupplierID {
+		return a, ports.ErrForbidden
+	}
+	if m.err != nil {
+		return a, m.err
+	}
+	m.writes++
+	if state.Status == "active" {
+		a.Admission = "approved"
+	}
+	a.Desired = "paused"
+	if state.Status == "active" && state.Schedulable {
+		a.Desired = "running"
+	}
+	a.Version++
+	m.rows[a.ID] = a
+	return a, nil
+}
+func TestAccountStatusRefreshMirrorsUpstreamAndPreservesFailures(t *testing.T) {
+	store := &observationMemory{memory: &memory{rows: map[string]ports.Account{}}}
+	source := &metricRemote{remote: &remote{}, state: &ports.AccountObservation{Status: "active", Schedulable: true}}
+	svc := &Service{Store: store, Upstream: source}
+	rows := []ports.Account{{ID: "owned", SupplierID: "owner", UpstreamID: 17, Admission: "needs_attention", Desired: "paused", Version: 1}}
+	svc.EnrichAccounts(context.Background(), "owner", rows)
+	if rows[0].Admission != "approved" || rows[0].Desired != "running" || rows[0].StateSync != "synced" || store.rows["owned"].Desired != "running" || rows[0].Metrics.Configuration == nil {
+		t.Fatal("state not persisted and returned", rows[0])
+	}
+	source.state.Schedulable = false
+	svc.EnrichAccounts(context.Background(), "owner", rows)
+	if rows[0].Admission != "approved" || rows[0].Desired != "paused" {
+		t.Fatal("pause created a second approval workflow")
+	}
+	source.fail = true
+	svc.EnrichAccounts(context.Background(), "owner", rows)
+	if rows[0].Admission != "approved" || rows[0].Desired != "paused" || rows[0].StateSync != "failed" || store.writes != 2 {
+		t.Fatal("failed source changed stored state", rows[0])
+	}
+	source.fail = false
+	store.err = ports.ErrConflict
+	svc.EnrichAccounts(context.Background(), "owner", rows)
+	if rows[0].StateSync != "pending" || store.writes != 2 {
+		t.Fatal("version conflict not marked pending")
+	}
 }
 
 func TestAccountMetricsOwnershipPrecisionAndFailure(t *testing.T) {

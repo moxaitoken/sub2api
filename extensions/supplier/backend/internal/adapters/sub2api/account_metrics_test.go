@@ -16,7 +16,7 @@ func TestAccountConfigurationAllowlist(t *testing.T) {
 				if r.Method != "GET" || r.URL.Path != "/api/v1/admin/accounts/17" || r.Header.Get("x-api-key") != "fixture-only" {
 					t.Error("wrong endpoint or credential boundary")
 				}
-				data := map[string]any{"id": 17, "platform": "anthropic", "type": "oauth", "concurrency": 23, "priority": 0, "credentials": map[string]string{"access_token": "secret-canary"}, "user": "private-canary"}
+				data := map[string]any{"id": 17, "platform": "anthropic", "type": "oauth", "concurrency": 23, "priority": 0, "status": "active", "schedulable": true, "credentials": map[string]string{"access_token": "secret-canary"}, "user": "private-canary"}
 				switch scenario {
 				case "wrong-id":
 					data["id"] = 18
@@ -43,6 +43,9 @@ func TestAccountConfigurationAllowlist(t *testing.T) {
 			}
 			if err != nil || value.ConcurrencyLimit != 23 || value.Priority != 0 {
 				t.Fatal(value, err)
+			}
+			if value.State == nil || value.State.Status != "active" || !value.State.Schedulable {
+				t.Fatal("missing upstream observation")
 			}
 			encoded, _ := json.Marshal(value)
 			if strings.Contains(string(encoded), "canary") || strings.Contains(string(encoded), "credentials") {

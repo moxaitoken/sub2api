@@ -16,6 +16,7 @@ type Account struct {
 	ObservedAt *time.Time      `json:"observed_at"`
 	Version    int64           `json:"version"`
 	Metrics    *AccountMetrics `json:"metrics,omitempty"`
+	StateSync  string          `json:"state_sync,omitempty"`
 }
 
 // AccountMetrics is an allowlisted read model, never an upstream account DTO.
@@ -28,6 +29,15 @@ type AccountMetrics struct {
 type AccountConfiguration struct {
 	ConcurrencyLimit int `json:"concurrency_limit"`
 	Priority         int `json:"priority"`
+	// State is read in the same upstream snapshot, never exposed as a config DTO.
+	State *AccountObservation `json:"-"`
+}
+type AccountObservation struct {
+	Status      string `json:"status"`
+	Schedulable bool   `json:"schedulable"`
+}
+type AccountObservationStore interface {
+	ObserveAccount(context.Context, string, Account, AccountObservation) (Account, error)
 }
 type AccountConsumption struct {
 	TodayCost   *string   `json:"today_cost_usd"`

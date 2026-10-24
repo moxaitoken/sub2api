@@ -128,6 +128,8 @@ export default {
   "costHint": "官方标准价，Asia/Shanghai 今日及全部历史的已同步用量；不是用户折后金额或供应商余额。",
   "syncingCosts": "同步中／未完成对账",
   "costSnapshot": "消耗查询时间",
+  "stateSyncFailed": "状态同步失败，显示上次状态",
+  "stateSyncPending": "状态同步中，显示上次状态",
   "accountDetails": "账号详情",
   "loadingAccounts": "正在加载账号…",
   "accountsFailed": "账号加载失败",
