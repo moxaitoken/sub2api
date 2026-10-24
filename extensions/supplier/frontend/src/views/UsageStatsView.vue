@@ -54,7 +54,7 @@ onBeforeUnmount(() => { generation++ })
       <p class="usage-note">{{ t('usage.observed') }} {{ observed(report.observed_at) }} · {{ t('usage.costScope') }}</p>
       <div class="usage-cards">
         <div class="usage-card"><span>{{ t('workspace.cost') }}</span><strong data-testid="usage-cost">${{ cost(report.summary.total_cost_usd) }}</strong><small>USD</small></div>
-        <div class="usage-card"><span>{{ t('workspace.requests') }}</span><strong>—</strong><small>{{ t('usage.attemptsUnknown') }}</small><small>{{ t('usage.records') }}: {{ count(report.summary.record_count) }}</small></div>
+        <div class="usage-card"><span>{{ t('usage.recordedRequests') }}</span><strong>{{ count(report.summary.record_count) }}</strong><small>{{ t('usage.recordScope') }}</small></div>
         <div class="usage-card"><span>{{ t('workspace.tokens') }}</span><strong>{{ count(report.summary.tokens) }}</strong><small>{{ t('usage.inputOutput') }} {{ count(report.summary.input_tokens) }} / {{ count(report.summary.output_tokens) }}</small></div>
         <div class="usage-card"><span>{{ t('workspace.cache') }}</span><strong>{{ count(report.summary.cache_tokens) }}</strong><small>{{ t('usage.readWrite') }} {{ count(report.summary.cache_read_tokens) }} / {{ count(report.summary.cache_creation_tokens) }}</small></div>
       </div>

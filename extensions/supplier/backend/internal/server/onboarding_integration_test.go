@@ -223,7 +223,11 @@ func TestR2LocalOnboarding(t *testing.T) {
 				}
 				data = map[string]bool{"ok": true}
 			} else {
-				data = a
+				data = struct {
+					ports.RemoteAccount
+					Concurrency int `json:"concurrency"`
+					Priority    int `json:"priority"`
+				}{a, 120, 0}
 			}
 		default:
 			t.Error("unexpected fixture path", r.URL.Path)
@@ -415,6 +419,31 @@ func TestR2LocalOnboarding(t *testing.T) {
 	}
 	if !remoteAccounts[items[0].UpstreamID].Schedulable {
 		t.Fatal("validated account was not enabled")
+	}
+	// The same authenticated list optionally projects safe configuration and
+	// cached consumption. No metrics query preserves the original contract.
+	w = call("GET", "/api/supplier/v1/accounts", nil, c1, "", "")
+	want(w, 200)
+	if strings.Contains(w.Body.String(), `"metrics"`) {
+		t.Fatal("legacy list contract changed")
+	}
+	w = call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, c1, "", "")
+	data = want(w, 200)
+	var projected []ports.Account
+	if e = json.Unmarshal(data["items"], &projected); e != nil || len(projected) != 1 {
+		t.Fatal(e, w.Body.String())
+	}
+	if projected[0].Metrics == nil || projected[0].Metrics.Configuration == nil || projected[0].Metrics.Configuration.ConcurrencyLimit != 120 || projected[0].Metrics.Consumption == nil || projected[0].Metrics.Consumption.TotalCost != nil {
+		t.Fatal("configuration or unobserved consumption projection incorrect", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "credentials") || strings.Contains(w.Body.String(), "upstream_account_id") {
+		t.Fatal("projection leaked source fields")
+	}
+	want(call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, nil, "", ""), 401)
+	w = call("GET", "/api/supplier/v1/accounts?include_metrics=1", nil, c2, "", "")
+	data = want(w, 200)
+	if string(data["total"]) != "0" || strings.Contains(w.Body.String(), items[0].ID) {
+		t.Fatal("metrics crossed supplier scope")
 	}
 	// Unknown external create must keep its reservation/account fence and never replay.
 	w = call("POST", "/api/supplier/v1/proxies", ports.ProxyInput{Name: "Second proxy", Address: "8.8.4.4:8080", Region: "SG"}, c1, csrf1, key())

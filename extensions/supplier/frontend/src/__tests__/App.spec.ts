@@ -54,7 +54,7 @@ describe('R2 portal boundaries',()=>{
  })
  it('admin business details lock the selected supplier and query scoped accounts',async()=>{
   window.history.replaceState(null,'','/?portal=admin');const f=vi.fn().mockResolvedValueOnce(ok(admin)).mockResolvedValueOnce(ok(page([row]))).mockResolvedValueOnce(ok(page([])));vi.stubGlobal('fetch',f)
-  const w=mountApp();await flushPromises();await w.findAll('tbody button').find(b=>b.text()==='Account pool')!.trigger('click');await flushPromises();expect(f.mock.calls[2][0]).toBe(`/api/supplier/admin/v1/suppliers/${row.id}/accounts?page=1&page_size=20`);expect(w.text()).toContain('Back to supplier list');w.unmount()
+  const w=mountApp();await flushPromises();await w.findAll('tbody button').find(b=>b.text()==='Account pool')!.trigger('click');await flushPromises();expect(f.mock.calls[2][0]).toBe(`/api/supplier/admin/v1/suppliers/${row.id}/accounts?page=1&page_size=20&include_metrics=1`);expect(w.text()).toContain('Back to supplier list');w.unmount()
  })
 })
 
@@ -75,7 +75,7 @@ describe('supplier workspace navigation and paging', () => {
  it('passes the requested page to the supplier-scoped API', async () => {
   const f=vi.fn().mockResolvedValueOnce(ok(local)).mockResolvedValueOnce(ok({...page([]),total:21,pages:2})).mockResolvedValueOnce(ok({...page([]),total:21,page:2,pages:2}));vi.stubGlobal('fetch',f)
   const w=mountApp();await flushPromises();await w.get('button[aria-label="Next"]').trigger('click');await flushPromises()
-  expect(f.mock.calls[2][0]).toBe('/api/supplier/v1/accounts?page=2&page_size=20')
+  expect(f.mock.calls[2][0]).toBe('/api/supplier/v1/accounts?page=2&page_size=20&include_metrics=1')
   expect(w.get('.workspace-pagination').text()).toContain('Page 2 / 2')
   w.unmount()
  })

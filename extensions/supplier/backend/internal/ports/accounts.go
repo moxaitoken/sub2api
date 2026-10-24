@@ -7,14 +7,40 @@ import (
 
 // Account is a supplier-owned view, never an upstream credential DTO.
 type Account struct {
-	ID         string     `json:"id"`
-	SupplierID string     `json:"-"`
-	UpstreamID int64      `json:"-"`
-	Name       string     `json:"name"`
-	Admission  string     `json:"admission_state"`
-	Desired    string     `json:"desired_state"`
-	ObservedAt *time.Time `json:"observed_at"`
-	Version    int64      `json:"version"`
+	ID         string          `json:"id"`
+	SupplierID string          `json:"-"`
+	UpstreamID int64           `json:"-"`
+	Name       string          `json:"name"`
+	Admission  string          `json:"admission_state"`
+	Desired    string          `json:"desired_state"`
+	ObservedAt *time.Time      `json:"observed_at"`
+	Version    int64           `json:"version"`
+	Metrics    *AccountMetrics `json:"metrics,omitempty"`
+}
+
+// AccountMetrics is an allowlisted read model, never an upstream account DTO.
+// Nil values mean unavailable, not zero. These are config limits and recorded
+// official-price costs, not live concurrency or supplier settlement balances.
+type AccountMetrics struct {
+	Configuration *AccountConfiguration `json:"configuration"`
+	Consumption   *AccountConsumption   `json:"consumption"`
+}
+type AccountConfiguration struct {
+	ConcurrencyLimit int `json:"concurrency_limit"`
+	Priority         int `json:"priority"`
+}
+type AccountConsumption struct {
+	TodayCost   *string   `json:"today_cost_usd"`
+	TotalCost   *string   `json:"total_cost_usd"`
+	TodayStatus string    `json:"today_status"`
+	TotalStatus string    `json:"total_status"`
+	ObservedAt  time.Time `json:"observed_at"`
+}
+type AccountConfigurationSource interface {
+	AccountConfiguration(context.Context, int64) (AccountConfiguration, error)
+}
+type AccountConsumptionStore interface {
+	AccountConsumption(context.Context, string, []string, time.Time) (map[string]AccountConsumption, error)
 }
 
 type OAuthSession struct {

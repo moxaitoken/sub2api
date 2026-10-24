@@ -23,7 +23,7 @@ describe('Claude account pool', () => {
     const wrapper = mountView(); await flushPromises()
     expect(wrapper.text()).toContain('No accounts yet')
     expect(wrapper.find('tbody').exists()).toBe(false)
-    expect(transport.mock.calls[1][0]).toBe('/api/supplier/v1/accounts?page=1&page_size=20')
+    expect(transport.mock.calls[1][0]).toBe('/api/supplier/v1/accounts?page=1&page_size=20&include_metrics=1')
     expect(wrapper.text()).not.toMatch(/Account review \(platform\)|Approve admission/)
     wrapper.unmount()
   })

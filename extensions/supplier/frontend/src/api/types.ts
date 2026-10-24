@@ -30,6 +30,10 @@ export interface SupplierAccount {
   desired_state: 'paused' | 'running'
   observed_at: string | null
   version: number
+  metrics?: {
+    configuration: { concurrency_limit: number; priority: number } | null
+    consumption: { today_cost_usd: string | null; total_cost_usd: string | null; today_status: 'complete' | 'partial'; total_status: 'complete' | 'partial'; observed_at: string } | null
+  }
 }
 export interface Page<T> { items: T[]; total: number; page: number; page_size: number; pages: number }
 export interface Authorization { id: string; authorization_url: string; expires_at: string }

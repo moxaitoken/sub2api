@@ -18,12 +18,13 @@ async function setup() {
   const w = mount(View, { props: { client: client as unknown as SupplierClient }, global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] } })
   await flushPromises(); return { w, client }
 }
-it('shows exact consumption and large tokens, while keeping all request attempts unknown', async () => {
+it('shows exact consumption and recorded requests without claiming all attempts', async () => {
   const { w, client } = await setup()
   expect(client.usage).toHaveBeenCalledWith('today', '', 1)
   expect(w.get('[data-testid=usage-cost]').text()).toBe('$0.300000000000000001')
   expect(w.text()).toContain('9,007,199,254,740,995')
-  expect(w.text()).toContain('All request attempts have no reliable source yet')
+  expect(w.text()).toContain('Recorded requests2')
+  expect(w.text()).toContain('Recorded usage only; failed or retried attempts may be excluded.')
   expect(w.text()).toContain('Fixture account'); w.unmount()
 })
 it('scopes filters, resets pages, and removes stale totals on failure', async () => {

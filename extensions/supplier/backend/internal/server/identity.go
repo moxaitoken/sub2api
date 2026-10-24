@@ -128,6 +128,9 @@ func (s *Server) identityAccounts(w http.ResponseWriter, r *http.Request, id str
 	if err != nil {
 		return err
 	}
+	if r.URL.Query().Get("include_metrics") == "1" {
+		s.cfg.Accounts.EnrichAccounts(r.Context(), id, rows)
+	}
 	s.reply(w, 200, map[string]any{"items": rows, "total": total, "page": page, "page_size": size, "pages": (total + int64(size) - 1) / int64(size)})
 	return nil
 }

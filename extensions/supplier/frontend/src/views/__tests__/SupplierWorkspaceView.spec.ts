@@ -11,6 +11,27 @@ const second: SupplierAccount = { ...first, id: 'fixture-2', name: 'Beta Claude'
 const view = (props = {}) => mount(SupplierWorkspaceView, { props: { tab: 'accounts', accounts: [first, second], total: 42, page: 1, pages: 3, loading: false, failed: false, updatedAt: '', ...props }, global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { zh, en } })] } })
 
 describe('supplier prototype business pages', () => {
+  it('renders exact costs and configuration in rows and details, never as live metrics', async () => {
+    const metrics = { configuration: { concurrency_limit: 23, priority: 0 }, consumption: { today_cost_usd: '0', total_cost_usd: '0.300000000000000001', today_status: 'complete', total_status: 'partial', observed_at: '2026-10-24T12:00:00+08:00' } }
+    const w = view({ accounts: [{ ...first, metrics }] })
+    expect(w.get('thead').text()).toContain('Concurrency limit')
+    expect(w.get('thead').text()).toContain('Scheduling priority')
+    const cells = w.findAll('tbody td').map(td => td.text())
+    expect(cells).toContain('23'); expect(cells).toContain('0'); expect(cells).toContain('$0')
+    expect(w.get('tbody').text()).toContain('$0.300000000000000001')
+    expect(w.get('tbody').text()).toContain(en.workspace.syncingCosts)
+    expect(w.findAll('.overview-metric strong').map(n => n.text())).toEqual(['—','—','—','—','—'])
+    await w.get('button[aria-label="Account details Alpha Claude"]').trigger('click')
+    expect(w.get('[role=dialog]').text()).toContain('$0.300000000000000001')
+    expect(w.get('[role=dialog]').text()).toContain(en.workspace.costSnapshot)
+    w.unmount()
+  })
+  it('keeps failed metric reads unavailable instead of fabricating zero', () => {
+    const w = view({ accounts: [{ ...first, metrics: { configuration: null, consumption: null } }] })
+    expect(w.get('tbody').text()).not.toContain('$0')
+    expect(w.findAll('tbody td').filter(td => td.text() === '—').length).toBeGreaterThanOrEqual(4)
+    w.unmount()
+  })
   it('uses the server total, never converts sparse account states into quota or health metrics', () => {
     const w = view()
     expect(w.get('.account-count strong').text()).toBe('42')

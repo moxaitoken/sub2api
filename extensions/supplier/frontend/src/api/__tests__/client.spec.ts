@@ -4,6 +4,24 @@ import { errorKey } from '../errorText'
 import { identity, success } from './fixtures'
 
 describe('supplier API client', () => {
+  it('requests scoped optional metrics and accepts legacy accounts without them', async () => {
+    const account = { id: 'owned', name: 'Fixture', admission_state: 'approved', desired_state: 'running', version: 1, observed_at: null }
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(success({ items: [account], total: 1 }))
+    const client = new SupplierClient(vi.fn(), transport)
+    expect((await client.accounts()).items).toEqual([account])
+    expect(transport.mock.calls[0][0]).toBe('/api/supplier/v1/accounts?page=1&page_size=20&include_metrics=1')
+  })
+  it('validates projected metrics while preserving exact decimal strings', async () => {
+    const account = { id: 'owned', name: 'Fixture', admission_state: 'approved', desired_state: 'running', version: 1, observed_at: null }
+    const metrics = { configuration: { concurrency_limit: 23, priority: 0 }, consumption: { today_cost_usd: '0', total_cost_usd: '0.300000000000000001', today_status: 'complete', total_status: 'partial', observed_at: '2026-10-24T12:00:00Z' } }
+    const transport = vi.fn<typeof fetch>().mockImplementation(async () => success({ items: [{ ...account, metrics }], total: 1 }))
+    const client = new SupplierClient(vi.fn(), transport)
+    expect((await client.accounts()).items[0].metrics?.consumption?.total_cost_usd).toBe('0.300000000000000001')
+    metrics.configuration.concurrency_limit = -1
+    await expect(client.accounts()).rejects.toMatchObject({ reason: 'INVALID_RESPONSE' })
+    metrics.configuration.concurrency_limit = 23; metrics.consumption.total_cost_usd = 'NaN'
+    await expect(client.accounts()).rejects.toMatchObject({ reason: 'INVALID_RESPONSE' })
+  })
   it.each([['INVALID_SUPPLIER_NAME','supplierName'],['INVALID_SUPPLIER_LOGIN','supplierLogin'],['INVALID_SUPPLIER_PASSWORD','supplierPassword']])('preserves safe supplier field diagnosis %s',async(reason,key)=>{
     const transport=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({code:400,reason,message:'private-secret'}),{status:400}))
     try { await new SupplierClient(vi.fn(),transport).me();expect.unreachable() }

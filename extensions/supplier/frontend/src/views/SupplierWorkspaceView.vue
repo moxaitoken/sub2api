@@ -20,6 +20,16 @@ const filtersActive = computed(() => Boolean(search.value || state.value || supp
 const displayTime = computed(() => props.updatedAt ? new Date(props.updatedAt).toLocaleTimeString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
 function reset() { search.value = ''; state.value = ''; supply.value = '' }
 function observed(value: string | null) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US') : '—' }
+function cost(value: string | null | undefined) {
+  if (typeof value !== 'string') return '—'
+  return '$' + (value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value)
+}
+function consumption(account: SupplierAccount, period: 'today' | 'total') {
+  return account.metrics?.consumption?.[period === 'today' ? 'today_cost_usd' : 'total_cost_usd']
+}
+function partial(account: SupplierAccount, period: 'today' | 'total') {
+  return account.metrics?.consumption?.[period === 'today' ? 'today_status' : 'total_status'] === 'partial'
+}
 watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; scopeOpen.value = false })
 </script>
 <template>
@@ -58,7 +68,10 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
             <td v-if="visible.includes('state')"><span class="status-badge" :class="account.admission_state === 'approved' ? 'green' : ['blocked','rejected','needs_attention'].includes(account.admission_state) ? 'red' : 'gray'">{{ t(`accounts.states.${account.admission_state}`) }}</span></td>
             <td v-if="visible.includes('supply')"><span class="supply-dot" :class="{ running: account.desired_state === 'running' }"></span>{{ t(`accounts.supplyStates.${account.desired_state}`) }}</td>
             <td v-if="visible.includes('quota')"><div class="row-quota"><span>5h <i></i> —</span><span>7d <i></i> —</span><span>Fable <i></i> —</span></div></td>
-            <td v-for="column in ['concurrency','weight','today','cumulative'].filter(c => visible.includes(c))" :key="column"><span :title="t('workspace.notReported')">—</span></td>
+            <td v-if="visible.includes('concurrency')" :title="t('workspace.concurrencyLimitHint')">{{ account.metrics?.configuration?.concurrency_limit ?? '—' }}</td>
+            <td v-if="visible.includes('weight')" :title="t('workspace.priorityHint')">{{ account.metrics?.configuration?.priority ?? '—' }}</td>
+            <td v-if="visible.includes('today')" :title="t('workspace.costHint')">{{ cost(consumption(account, 'today')) }}<small v-if="partial(account, 'today')" class="metrics-partial">{{ t('workspace.syncingCosts') }}</small></td>
+            <td v-if="visible.includes('cumulative')" :title="t('workspace.costHint')">{{ cost(consumption(account, 'total')) }}<small v-if="partial(account, 'total')" class="metrics-partial">{{ t('workspace.syncingCosts') }}</small></td>
             <td v-if="visible.includes('observed')">{{ observed(account.observed_at) }}</td>
             <td v-if="visible.includes('actions')"><button class="icon-button text-button" :aria-label="`${t('workspace.accountDetails')} ${account.name}`" @click="details = account"><PortalIcon name="info" :size="16" /></button></td>
           </tr>
@@ -81,6 +94,9 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
     </template>
 
     <PortalDialog v-if="scopeOpen" :title="t('workspace.scope')" @close="scopeOpen = false"><p>{{ t('workspace.scopeExplanation') }}</p></PortalDialog>
-    <PortalDialog v-if="details" :title="t('workspace.accountDetails')" @close="details = null"><dl class="account-details"><dt>{{ t('accounts.name') }}</dt><dd>{{ details.name }}</dd><dt>ID</dt><dd>{{ details.id }}</dd><dt>{{ t('accounts.state') }}</dt><dd>{{ t(`accounts.states.${details.admission_state}`) }}</dd><dt>{{ t('accounts.supply') }}</dt><dd>{{ t(`accounts.supplyStates.${details.desired_state}`) }}</dd><dt>{{ t('workspace.columnsMap.observed') }}</dt><dd>{{ observed(details.observed_at) }}</dd></dl><p class="muted">{{ t('workspace.notReported') }}</p></PortalDialog>
+    <PortalDialog v-if="details" :title="t('workspace.accountDetails')" @close="details = null"><dl class="account-details"><dt>{{ t('accounts.name') }}</dt><dd>{{ details.name }}</dd><dt>ID</dt><dd>{{ details.id }}</dd><dt>{{ t('accounts.state') }}</dt><dd>{{ t(`accounts.states.${details.admission_state}`) }}</dd><dt>{{ t('accounts.supply') }}</dt><dd>{{ t(`accounts.supplyStates.${details.desired_state}`) }}</dd><dt>{{ t('workspace.columnsMap.concurrency') }}</dt><dd>{{ details.metrics?.configuration?.concurrency_limit ?? '—' }}</dd><dt>{{ t('workspace.columnsMap.weight') }}</dt><dd>{{ details.metrics?.configuration?.priority ?? '—' }}</dd><dt>{{ t('workspace.columnsMap.today') }}</dt><dd>{{ cost(consumption(details, 'today')) }} <small v-if="partial(details, 'today')">{{ t('workspace.syncingCosts') }}</small></dd><dt>{{ t('workspace.columnsMap.cumulative') }}</dt><dd>{{ cost(consumption(details, 'total')) }} <small v-if="partial(details, 'total')">{{ t('workspace.syncingCosts') }}</small></dd><dt>{{ t('workspace.columnsMap.observed') }}</dt><dd>{{ observed(details.observed_at) }}</dd><dt v-if="details.metrics?.consumption">{{ t('workspace.costSnapshot') }}</dt><dd v-if="details.metrics?.consumption">{{ observed(details.metrics.consumption.observed_at) }}</dd></dl><p class="muted">{{ t('workspace.notReported') }}</p></PortalDialog>
   </div>
 </template>
+<style scoped>
+.metrics-partial { display: block; color: #9a6700; font-size: 11px; }
+</style>

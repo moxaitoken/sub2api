@@ -136,13 +136,26 @@ export class SupplierClient {
   }
 
   async accounts(page = 1, review = false): Promise<Page<SupplierAccount>> {
-    const data = await this.request<Page<SupplierAccount>>(`${review ? '/review' : ''}/accounts?page=${page}&page_size=20`)
+    const data = await this.request<Page<SupplierAccount>>(`${review ? '/review' : ''}/accounts?page=${page}&page_size=20${review ? '' : '&include_metrics=1'}`)
+    return this.checkedAccounts(data)
+  }
+
+  private checkedAccounts(data: Page<SupplierAccount>): Page<SupplierAccount> {
     if (!data || !Array.isArray(data.items) || !Number.isSafeInteger(data.total) || data.total < 0 ||
       data.items.some(item => !item || typeof item.id !== 'string' || typeof item.name !== 'string' ||
         !Number.isSafeInteger(item.version) || item.version < 1 ||
         !['provisioning', 'identity_pending', 'pending', 'approved', 'rejected', 'blocked', 'deleting', 'deleted', 'needs_attention'].includes(item.admission_state) ||
-        !['paused', 'running'].includes(item.desired_state))) throw new ApiError(200, 'INVALID_RESPONSE')
+        !['paused', 'running'].includes(item.desired_state) || !this.validMetrics(item.metrics))) throw new ApiError(200, 'INVALID_RESPONSE')
     return data
+  }
+
+  private validMetrics(metrics: SupplierAccount['metrics']): boolean {
+    if (metrics === undefined) return true // Older supplier servers remain compatible.
+    if (!metrics || typeof metrics !== 'object') return false
+    const config = metrics.configuration, costs = metrics.consumption
+    if (config !== null && (!config || !Number.isSafeInteger(config.concurrency_limit) || config.concurrency_limit < 1 || !Number.isSafeInteger(config.priority) || config.priority < 0)) return false
+    const decimal = (value: unknown) => value === null || (typeof value === 'string' && /^\d{1,40}(?:\.\d{1,18})?$/.test(value))
+    return costs === null || Boolean(costs && decimal(costs.today_cost_usd) && decimal(costs.total_cost_usd) && ['complete','partial'].includes(costs.today_status) && ['complete','partial'].includes(costs.total_status) && Number.isFinite(Date.parse(costs.observed_at)))
   }
 
   async beginAuthorization(name: string): Promise<Authorization> {
@@ -210,7 +223,7 @@ export class SupplierClient {
   async scopedAccounts(supplier?: string, page = 1): Promise<Page<SupplierAccount>> {
     if ((this.portal === 'admin') !== Boolean(supplier)) throw new ApiError(403, 'ACCESS_DENIED')
     const prefix = supplier ? `/suppliers/${encodeURIComponent(supplier)}` : ''
-    return this.request(`${prefix}/accounts?page=${page}&page_size=20`)
+    return this.checkedAccounts(await this.request<Page<SupplierAccount>>(`${prefix}/accounts?page=${page}&page_size=20&include_metrics=1`))
   }
 
   private supplierOnly(): void { if (this.portal !== 'supplier') throw new ApiError(403, 'ACCESS_DENIED') }
