@@ -164,10 +164,18 @@ func TestR2LocalOnboarding(t *testing.T) {
 				ProxyID     int64   `json:"proxy_id"`
 				GroupIDs    []int64 `json:"group_ids"`
 				Credentials map[string]any
+				Concurrency int
+				Extra       map[string]any
 			}
 			json.NewDecoder(r.Body).Decode(&in)
 			if in.ProxyID <= 0 || len(in.GroupIDs) != 1 || in.GroupIDs[0] != 2 || in.Schedulable == nil || *in.Schedulable {
 				t.Error("unsafe create")
+			}
+			if in.Name == "Real fixture account" && (in.Concurrency != 120 || in.Extra["max_sessions"] != float64(150) || in.Extra["base_rpm"] != float64(23) || in.Extra["session_idle_timeout_minutes"] != float64(8) || in.Extra["window_cost_limit"] != 12.34 || in.Extra["window_cost_sticky_reserve"] != float64(0)) {
+				t.Errorf("supplier settings were not forwarded unchanged: concurrency=%d extra=%v", in.Concurrency, in.Extra)
+			}
+			if in.Name == "Unknown" && (in.Extra["max_sessions"] != nil || in.Extra["base_rpm"] != nil) {
+				t.Error("disabled limits were re-enabled", in.Extra)
 			}
 			id := int64(200 + len(remoteAccounts))
 			a := ports.RemoteAccount{ID: id, Name: in.Name, Platform: "anthropic", Type: "oauth", Status: "active", Schedulable: false, ProxyID: &in.ProxyID, Credentials: in.Credentials}
@@ -363,10 +371,24 @@ func TestR2LocalOnboarding(t *testing.T) {
 	// Begin is idempotent, settings freeze, and invalid state never exchanges.
 	beginKey := key()
 	beginInput := ports.BeginOnboarding{Name: "Real fixture account", ProxyID: proxyID, GroupID: 2}
+	var custom ports.AccountSettings
+	json.Unmarshal([]byte(`{"concurrency":120,"max_sessions":150,"session_idle_timeout_minutes":8,"base_rpm":23,"window_cost_limit":12.34,"window_cost_sticky_reserve":0}`), &custom)
+	beginInput.Settings = &custom
 	data = want(call("POST", "/api/supplier/v1/oauth/sessions", beginInput, c1, csrf1, beginKey), 201)
 	var oauthID string
 	json.Unmarshal(data["id"], &oauthID)
+	settingsBound, e := store.Onboarding(ctx, first.ID, oauthID)
+	if e != nil || settingsBound.Settings.Concurrency != 120 || *settingsBound.Settings.MaxSessions != 150 || *settingsBound.Settings.BaseRPM != 23 {
+		t.Fatal("settings did not survive database round-trip", settingsBound.Settings, e)
+	}
 	want(call("POST", "/api/supplier/v1/oauth/sessions", beginInput, c1, csrf1, beginKey), 201)
+	changed := beginInput
+	other := custom
+	other.Concurrency = 121
+	changed.Settings = &other
+	want(call("POST", "/api/supplier/v1/oauth/sessions", changed, c1, csrf1, beginKey), 409)
+	invalid := ports.BeginOnboarding{ProxyID: proxyID, GroupID: 2, Settings: &ports.AccountSettings{Concurrency: -1}}
+	want(call("POST", "/api/supplier/v1/oauth/sessions", invalid, c1, csrf1, key()), 400)
 	if generateCalls != 1 {
 		t.Fatal("authorization generated twice")
 	}
@@ -399,7 +421,8 @@ func TestR2LocalOnboarding(t *testing.T) {
 	data = want(w, 201)
 	var secondProxy string
 	json.Unmarshal(data["id"], &secondProxy)
-	data = want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{Name: "Unknown", ProxyID: secondProxy, GroupID: 2}, c1, csrf1, key()), 201)
+	zero := 0
+	data = want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{Name: "Unknown", ProxyID: secondProxy, GroupID: 2, Settings: &ports.AccountSettings{Concurrency: 7, MaxSessions: &zero, BaseRPM: &zero}}, c1, csrf1, key()), 201)
 	var unknownID string
 	json.Unmarshal(data["id"], &unknownID)
 	failCreate = true
@@ -486,6 +509,15 @@ func TestR2LocalOnboarding(t *testing.T) {
 	bound, e := store.Onboarding(ctx, first.ID, resetBound)
 	if e != nil {
 		t.Fatal(e)
+	}
+	// An authorization created before migration 013 has an empty settings
+	// snapshot. Its previous limits must not change after upgrading.
+	if _, e = db.Exec(`UPDATE supplier.supplier_oauth_sessions SET account_settings='{}'::jsonb WHERE id=$1`, resetBound); e != nil {
+		t.Fatal(e)
+	}
+	legacy, e := store.Onboarding(ctx, first.ID, resetBound)
+	if e != nil || legacy.Settings.Concurrency != 100 || *legacy.Settings.MaxSessions != 100 || *legacy.Settings.BaseRPM != 0 {
+		t.Fatal("legacy authorization defaults changed", legacy.Settings, e)
 	}
 	if _, e = db.Exec(`UPDATE supplier.supplier_oauth_sessions SET credential_version=NULL WHERE id=$1`, resetBound); e == nil {
 		t.Fatal("NULL actor generation bypassed constraint")

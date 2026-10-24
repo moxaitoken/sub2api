@@ -11,7 +11,7 @@ export function errorKey(error: unknown): string {
     OAUTH_STATE_MISMATCH: 'authorization', OAUTH_EXPIRED: 'authorization', INVALID_AUTHORIZATION_CODE: 'authorization',
     INVALID_AUTHORIZATION_RESPONSE: 'invalid', ACCOUNT_IDENTITY_UNVERIFIED: 'accountIdentity',
     RESOURCE_VERSION_CONFLICT: 'accountConflict', ACCOUNT_STATE_CONFLICT: 'accountConflict',
-    INVALID_ACCOUNT_NAME: 'invalid', INVALID_REVIEW_REASON: 'invalid', IDEMPOTENCY_KEY_REQUIRED: 'invalid', IF_MATCH_REQUIRED: 'invalid', INVALID_VERSION: 'invalid', INVALID_PAGE: 'invalid',
+    INVALID_ACCOUNT_SETTINGS: 'accountSettings', INVALID_ACCOUNT_NAME: 'invalid', INVALID_REVIEW_REASON: 'invalid', IDEMPOTENCY_KEY_REQUIRED: 'invalid', IF_MATCH_REQUIRED: 'invalid', INVALID_VERSION: 'invalid', INVALID_PAGE: 'invalid',
     UPSTREAM_UNAVAILABLE: 'upstream', UPSTREAM_ACTION_REQUIRED: 'actionRequired',
     CSRF_INVALID: 'csrf', INVALID_ORIGIN: 'csrf', RATE_LIMITED: 'rateLimited',
     CAPTCHA_REQUIRED: 'captcha', CAPTCHA_INVALID: 'captcha', CHALLENGE_EXPIRED: 'twoFactor',

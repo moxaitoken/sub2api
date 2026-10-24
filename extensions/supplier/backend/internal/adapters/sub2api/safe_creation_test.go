@@ -35,7 +35,7 @@ func TestBoundCreationRequiresAtomicPauseCapability(t *testing.T) {
 			}))
 			defer up.Close()
 			c, _ := NewAccountClient(up.URL, "fixture-key")
-			_, e := c.CreateBoundAccount(context.Background(), "fixture", "fixture-idempotency", ports.ClaudeTokens{}, 8, 2)
+			_, e := c.CreateBoundAccount(context.Background(), "fixture", "fixture-idempotency", ports.ClaudeTokens{}, 8, 2, ports.DefaultAccountSettings())
 			if supported && (e != nil || creates != 1) {
 				t.Fatal(e, creates)
 			}

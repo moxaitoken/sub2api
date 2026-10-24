@@ -1,6 +1,6 @@
 import { checkedUsage } from './usage'
 import type { UsagePeriod, UsageReport } from './types'
-import type { Identity, LoginInput, LoginResult, SupplierAccount, Page, Authorization, AccountOperation, PortalIdentity, ManagedSupplier, OwnProxy, ProxyInput, OnboardingOptions } from './types'
+import type { Identity, LoginInput, LoginResult, SupplierAccount, Page, Authorization, AccountOperation, PortalIdentity, ManagedSupplier, OwnProxy, ProxyInput, OnboardingOptions, AccountSettings } from './types'
 
 const base = '/api/supplier/v1'
 const safeReasons = new Set([
@@ -13,7 +13,7 @@ const safeReasons = new Set([
   'LOGIN_RATE_LIMIT', 'UPSTREAM_UNAUTHORIZED', 'UPSTREAM_FORBIDDEN', 'UPSTREAM_LOCKED',
   'UPSTREAM_RATE_LIMITED', 'UPSTREAM_UNAVAILABLE', 'UPSTREAM_TRANSPORT_ERROR',
   'UPSTREAM_BAD_RESPONSE', 'UPSTREAM_REJECTED', 'UPSTREAM_INVALID_TOKEN',
-  'ACCOUNT_SERVICE_NOT_CONFIGURED', 'INVALID_ACCOUNT_NAME', 'INVALID_SUPPLIER_GROUP_NAME', 'OAUTH_STATE_MISMATCH', 'OAUTH_EXPIRED',
+  'ACCOUNT_SERVICE_NOT_CONFIGURED', 'INVALID_ACCOUNT_NAME', 'INVALID_ACCOUNT_SETTINGS', 'INVALID_SUPPLIER_GROUP_NAME', 'OAUTH_STATE_MISMATCH', 'OAUTH_EXPIRED',
   'INVALID_AUTHORIZATION_CODE', 'INVALID_AUTHORIZATION_RESPONSE', 'ACCOUNT_IDENTITY_UNVERIFIED',
   'ACCOUNT_STATE_DRIFT', 'ACCOUNT_STATE_CONFLICT', 'IDEMPOTENCY_KEY_REQUIRED', 'IF_MATCH_REQUIRED',
   'INVALID_SUPPLIER_NAME', 'INVALID_SUPPLIER_LOGIN', 'INVALID_SUPPLIER_PASSWORD',
@@ -240,10 +240,10 @@ export class SupplierClient {
   async deleteOwnProxy(id: string): Promise<void> {
     this.supplierOnly(); await this.request(`/proxies/${encodeURIComponent(id)}`, {method:'DELETE'})
   }
-  async beginOnboarding(name: string, proxy: string, groups: number[], key: string): Promise<Authorization> {
+  async beginOnboarding(name: string, proxy: string, groups: number[], key: string, settings?: AccountSettings): Promise<Authorization> {
     this.supplierOnly()
     const group_ids = [...new Set(groups)].filter(id => Number.isSafeInteger(id) && id > 0)
-    const data = await this.request<Authorization>('/oauth/sessions', {method:'POST',body:{name,proxy_id:proxy,group_ids},idempotencyKey:key})
+    const data = await this.request<Authorization>('/oauth/sessions', {method:'POST',body:{name,proxy_id:proxy,group_ids,settings},idempotencyKey:key})
     try {
       const url = new URL(data.authorization_url)
       if (url.protocol !== 'https:' || url.host !== 'claude.com' || url.pathname !== '/cai/oauth/authorize' || url.username || url.password || url.hash || !url.searchParams.get('state') || !data.id || !Number.isFinite(Date.parse(data.expires_at))) throw new Error('invalid')

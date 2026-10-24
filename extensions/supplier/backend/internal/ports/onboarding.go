@@ -55,17 +55,38 @@ type AccountGroup struct {
 	Status   string  `json:"status"`
 	GroupIDs []int64 `json:"group_ids,omitempty"`
 }
+
+// AccountSettings are frozen when a supplier starts OAuth onboarding.
+// Omitted limits use defaults; an explicit zero disables sessions or RPM.
+type AccountSettings struct {
+	Concurrency               int      `json:"concurrency"`
+	WindowCostLimit           *float64 `json:"window_cost_limit,omitempty"`
+	WindowCostStickyReserve   *float64 `json:"window_cost_sticky_reserve,omitempty"`
+	MaxSessions               *int     `json:"max_sessions,omitempty"`
+	SessionIdleTimeoutMinutes *int     `json:"session_idle_timeout_minutes,omitempty"`
+	BaseRPM                   *int     `json:"base_rpm,omitempty"`
+	RPMStrategy               string   `json:"rpm_strategy,omitempty"`
+	RPMStickyBuffer           *int     `json:"rpm_sticky_buffer,omitempty"`
+}
+
+func DefaultAccountSettings() AccountSettings {
+	maxSessions, idle, rpm := 100, 5, 15
+	return AccountSettings{Concurrency: 100, MaxSessions: &maxSessions, SessionIdleTimeoutMinutes: &idle, BaseRPM: &rpm, RPMStrategy: "tiered"}
+}
+
 type BeginOnboarding struct {
-	Name     string  `json:"name"`
-	ProxyID  string  `json:"proxy_id"`
-	GroupID  int64   `json:"group_id,omitempty"` // legacy single-group clients
-	GroupIDs []int64 `json:"group_ids,omitempty"`
+	Name     string           `json:"name"`
+	ProxyID  string           `json:"proxy_id"`
+	GroupID  int64            `json:"group_id,omitempty"` // legacy single-group clients
+	GroupIDs []int64          `json:"group_ids,omitempty"`
+	Settings *AccountSettings `json:"settings,omitempty"`
 }
 type BoundOAuth struct {
 	OAuthSession
 	Proxy                                   OwnProxy
 	GroupID                                 int64
 	GroupIDs                                []int64
+	Settings                                AccountSettings
 	CredentialVersion, SessionEpoch         int64
 	BeginKey, RequestHash, CreatedAccountID string
 }
@@ -76,7 +97,7 @@ type OnboardingUpstream interface {
 	AccountGroup(context.Context, int64) (AccountGroup, error)
 	GenerateBoundOAuth(context.Context, int64) (RemoteOAuth, error)
 	ExchangeBoundOAuth(context.Context, string, string, int64) (ClaudeTokens, error)
-	CreateBoundAccount(context.Context, string, string, ClaudeTokens, int64, int64) (RemoteAccount, error)
+	CreateBoundAccount(context.Context, string, string, ClaudeTokens, int64, int64, AccountSettings) (RemoteAccount, error)
 }
 type OnboardingStore interface {
 	Proxies(context.Context, string) ([]OwnProxy, error)

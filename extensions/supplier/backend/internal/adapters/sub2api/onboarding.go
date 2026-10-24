@@ -63,6 +63,6 @@ func (c *AccountClient) ExchangeBoundOAuth(ctx context.Context, session, code st
 	e := c.call(ctx, "POST", "/api/v1/admin/accounts/exchange-code", map[string]any{"session_id": session, "code": code, "proxy_id": proxy}, &out, "")
 	return out, e
 }
-func (c *AccountClient) CreateBoundAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group, proxy int64) (ports.RemoteAccount, error) {
-	return c.createClaudeAccount(ctx, name, key, tokens, group, &proxy)
+func (c *AccountClient) CreateBoundAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group, proxy int64, settings ports.AccountSettings) (ports.RemoteAccount, error) {
+	return c.createClaudeAccount(ctx, name, key, tokens, group, &proxy, settings)
 }

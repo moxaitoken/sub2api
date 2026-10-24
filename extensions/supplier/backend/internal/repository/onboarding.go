@@ -186,11 +186,24 @@ func (s *Store) FinishProxy(ctx context.Context, p ports.OwnProxy, remoteID int6
 	return e
 }
 
-const oauthLocalColumns = `o.id::text,o.supplier_id::text,o.name,encode(o.expected_state_hash,'hex'),o.key_id,o.status,o.upstream_session_cipher,o.expires_at,o.target_group_id,o.target_group_ids,o.credential_version,o.session_epoch,o.begin_key::text,encode(o.request_hash,'hex'),COALESCE(o.created_account_id::text,''),o.proxy_version,p.id::text,p.name,p.address,p.region,p.status,p.capacity,COALESCE(p.upstream_proxy_id,0),encode(p.config_hash,'hex')`
+const oauthLocalColumns = `o.id::text,o.supplier_id::text,o.name,encode(o.expected_state_hash,'hex'),o.key_id,o.status,o.upstream_session_cipher,o.expires_at,o.target_group_id,o.target_group_ids,o.account_settings,o.credential_version,o.session_epoch,o.begin_key::text,encode(o.request_hash,'hex'),COALESCE(o.created_account_id::text,''),o.proxy_version,p.id::text,p.name,p.address,p.region,p.status,p.capacity,COALESCE(p.upstream_proxy_id,0),encode(p.config_hash,'hex')`
 
 func scanOnboarding(row scanner) (ports.BoundOAuth, error) {
 	var o ports.BoundOAuth
-	e := row.Scan(&o.ID, &o.SupplierID, &o.Name, &o.StateHash, &o.KeyID, &o.Status, &o.Cipher, &o.ExpiresAt, &o.GroupID, pq.Array(&o.GroupIDs), &o.CredentialVersion, &o.SessionEpoch, &o.BeginKey, &o.RequestHash, &o.CreatedAccountID, &o.Proxy.Version, &o.Proxy.ID, &o.Proxy.Name, &o.Proxy.Address, &o.Proxy.Region, &o.Proxy.Status, &o.Proxy.Capacity, &o.Proxy.UpstreamID, &o.Proxy.ConfigHash)
+	var rawSettings []byte
+	e := row.Scan(&o.ID, &o.SupplierID, &o.Name, &o.StateHash, &o.KeyID, &o.Status, &o.Cipher, &o.ExpiresAt, &o.GroupID, pq.Array(&o.GroupIDs), &rawSettings, &o.CredentialVersion, &o.SessionEpoch, &o.BeginKey, &o.RequestHash, &o.CreatedAccountID, &o.Proxy.Version, &o.Proxy.ID, &o.Proxy.Name, &o.Proxy.Address, &o.Proxy.Region, &o.Proxy.Status, &o.Proxy.Capacity, &o.Proxy.UpstreamID, &o.Proxy.ConfigHash)
+	if e == nil {
+		o.Settings = ports.DefaultAccountSettings()
+		// Pre-013 authorizations used sessions=100 but no RPM limit. Preserve
+		// their frozen behavior instead of applying the new form defaults.
+		zeroRPM := 0
+		o.Settings.BaseRPM = &zeroRPM
+		if len(rawSettings) > 0 && string(rawSettings) != "{}" {
+			if json.Unmarshal(rawSettings, &o.Settings) != nil {
+				return o, ports.ErrUnavailable
+			}
+		}
+	}
 	if e == nil && len(o.GroupIDs) == 0 && o.GroupID > 0 {
 		o.GroupIDs = []int64{o.GroupID}
 	}
@@ -261,7 +274,11 @@ func (s *Store) ReserveOnboarding(ctx context.Context, r ports.SupplierRecord, o
 		if len(o.GroupIDs) == 0 && o.GroupID > 0 {
 			o.GroupIDs = []int64{o.GroupID}
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO supplier.supplier_oauth_sessions(id,supplier_id,actor_user_id,actor_kind,actor_id,upstream_instance_id,purpose,upstream_session_cipher,key_id,expected_state_hash,expires_at,name,proxy_id,proxy_version,target_group_id,target_group_ids,credential_version,session_epoch,begin_key,request_hash) VALUES($1,$2,NULL,'supplier',($2::uuid)::text,$3,'create',''::bytea,$4,decode($5,'hex'),$6,$7,$8,$9,$10,$11,$12,$13,$14,decode($15,'hex'))`, o.ID, o.SupplierID, s.instanceID, o.KeyID, o.StateHash, o.ExpiresAt, o.Name, o.Proxy.ID, o.Proxy.Version, o.GroupID, pq.Array(o.GroupIDs), o.CredentialVersion, o.SessionEpoch, o.BeginKey, o.RequestHash)
+		settings, marshalErr := json.Marshal(o.Settings)
+		if marshalErr != nil {
+			return o, marshalErr
+		}
+		_, e = tx.ExecContext(ctx, `INSERT INTO supplier.supplier_oauth_sessions(id,supplier_id,actor_user_id,actor_kind,actor_id,upstream_instance_id,purpose,upstream_session_cipher,key_id,expected_state_hash,expires_at,name,proxy_id,proxy_version,target_group_id,target_group_ids,account_settings,credential_version,session_epoch,begin_key,request_hash) VALUES($1,$2,NULL,'supplier',($2::uuid)::text,$3,'create',''::bytea,$4,decode($5,'hex'),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,decode($16,'hex'))`, o.ID, o.SupplierID, s.instanceID, o.KeyID, o.StateHash, o.ExpiresAt, o.Name, o.Proxy.ID, o.Proxy.Version, o.GroupID, pq.Array(o.GroupIDs), settings, o.CredentialVersion, o.SessionEpoch, o.BeginKey, o.RequestHash)
 		if e == nil {
 			e = localAudit(ctx, tx, o.SupplierID, "", o.ID, "oauth", "oauth.begin", "succeeded")
 		}

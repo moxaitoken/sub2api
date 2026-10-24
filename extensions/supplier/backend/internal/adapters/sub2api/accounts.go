@@ -17,11 +17,8 @@ type AccountClient struct {
 }
 
 const (
-	// Supplier-created Claude accounts use the same platform defaults as the
-	// main account creation form. Suppliers do not configure these values.
-	supplierDefaultConcurrency           = 100
-	supplierDefaultMaxSessions           = 100
 	supplierDefaultSessionIdleTimeoutMin = 5
+	supplierDefaultWindowStickyReserve   = 10
 )
 
 func NewAccountClient(origin, key string) (*AccountClient, error) {
@@ -112,11 +109,41 @@ func (c *AccountClient) CheckClaudeIdentity(ctx context.Context, identity string
 }
 
 func (c *AccountClient) CreateClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64) (ports.RemoteAccount, error) {
-	return c.createClaudeAccount(ctx, name, key, tokens, group, nil)
+	settings := ports.DefaultAccountSettings()
+	settings.BaseRPM = nil // Keep the retired legacy authorization path unchanged.
+	return c.createClaudeAccount(ctx, name, key, tokens, group, nil, settings)
 }
-func (c *AccountClient) createClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64, proxy *int64) (ports.RemoteAccount, error) {
+func (c *AccountClient) createClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64, proxy *int64, settings ports.AccountSettings) (ports.RemoteAccount, error) {
 	var result ports.RemoteAccount
-	payload := map[string]any{"name": name, "platform": "anthropic", "type": "oauth", "group_ids": []int64{group}, "concurrency": supplierDefaultConcurrency, "priority": 1, "upstream_billing_probe_enabled": false, "extra": map[string]any{"max_sessions": supplierDefaultMaxSessions, "session_idle_timeout_minutes": supplierDefaultSessionIdleTimeoutMin}, "credentials": map[string]any{"access_token": tokens.Access, "refresh_token": tokens.Refresh, "expires_at": strconv.FormatInt(tokens.ExpiresAt, 10), "account_uuid": tokens.AccountUUID, "org_uuid": tokens.OrgUUID}}
+	if settings.Concurrency == 0 {
+		settings.Concurrency = ports.DefaultAccountSettings().Concurrency
+	}
+	extra := map[string]any{}
+	if settings.WindowCostLimit != nil {
+		extra["window_cost_limit"] = *settings.WindowCostLimit
+		extra["window_cost_sticky_reserve"] = supplierDefaultWindowStickyReserve
+		if settings.WindowCostStickyReserve != nil {
+			extra["window_cost_sticky_reserve"] = *settings.WindowCostStickyReserve
+		}
+	}
+	if settings.MaxSessions != nil && *settings.MaxSessions > 0 {
+		extra["max_sessions"] = *settings.MaxSessions
+		idle := supplierDefaultSessionIdleTimeoutMin
+		if settings.SessionIdleTimeoutMinutes != nil {
+			idle = *settings.SessionIdleTimeoutMinutes
+		}
+		extra["session_idle_timeout_minutes"] = idle
+	}
+	if settings.BaseRPM != nil && *settings.BaseRPM > 0 {
+		extra["base_rpm"] = *settings.BaseRPM
+		if settings.RPMStrategy != "" {
+			extra["rpm_strategy"] = settings.RPMStrategy
+		}
+		if settings.RPMStickyBuffer != nil {
+			extra["rpm_sticky_buffer"] = *settings.RPMStickyBuffer
+		}
+	}
+	payload := map[string]any{"name": name, "platform": "anthropic", "type": "oauth", "group_ids": []int64{group}, "concurrency": settings.Concurrency, "priority": 1, "upstream_billing_probe_enabled": false, "extra": extra, "credentials": map[string]any{"access_token": tokens.Access, "refresh_token": tokens.Refresh, "expires_at": strconv.FormatInt(tokens.ExpiresAt, 10), "account_uuid": tokens.AccountUUID, "org_uuid": tokens.OrgUUID}}
 	if proxy != nil {
 		if *proxy <= 0 {
 			return result, ports.ErrForbidden

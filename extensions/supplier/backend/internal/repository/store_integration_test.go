@@ -110,8 +110,12 @@ func TestPostgresStore(t *testing.T) {
 		if err := s.CheckMigrations(ctx); err != nil {
 			t.Fatal(err)
 		}
+		files, err := migrationFiles()
+		if err != nil {
+			t.Fatal(err)
+		}
 		var count int
-		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != 11 {
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM supplier.schema_migrations`).Scan(&count); err != nil || count != len(files) {
 			t.Fatalf("migration count %d: %v", count, err)
 		}
 		if _, err = db.ExecContext(ctx, `UPDATE supplier.schema_migrations SET checksum=repeat('0',64) WHERE version='002_session_binding.sql'`); err != nil {
@@ -120,7 +124,7 @@ func TestPostgresStore(t *testing.T) {
 		if err := s.Migrate(ctx); !errors.Is(err, ports.ErrConflict) {
 			t.Fatalf("tampered migration: %v", err)
 		}
-		files, _ := migrationFiles()
+		files, _ = migrationFiles()
 		if _, err = db.ExecContext(ctx, `UPDATE supplier.schema_migrations SET checksum=$1 WHERE version='002_session_binding.sql'`, files[1].checksum); err != nil {
 			t.Fatal(err)
 		}
@@ -482,7 +486,7 @@ func TestPostgresStore(t *testing.T) {
 					t.Fatal(err)
 				}
 				if scenario == "one_owner" {
-					if !revoked || migrations != 11 {
+					if !revoked || migrations != len(files) {
 						t.Fatal("retired ops session or migration state", revoked, migrations)
 					}
 					if _, err := db.ExecContext(ctx, `UPDATE supplier.supplier_sessions SET revoked_at=NULL WHERE id=$1`, opsID); !errors.Is(mapError(err), ports.ErrConflict) {

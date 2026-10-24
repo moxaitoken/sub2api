@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
+	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -42,6 +43,51 @@ func normalizeGroupIDs(in ports.BeginOnboarding) ([]int64, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out, nil
 }
+
+func normalizeAccountSettings(in ports.AccountSettings) (ports.AccountSettings, error) {
+	settings := in
+	defaults := ports.DefaultAccountSettings()
+	if settings.Concurrency == 0 {
+		settings.Concurrency = defaults.Concurrency
+	}
+	if settings.Concurrency < 1 || settings.Concurrency > math.MaxInt32 {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.MaxSessions == nil {
+		settings.MaxSessions = defaults.MaxSessions
+	}
+	if *settings.MaxSessions < 0 || *settings.MaxSessions > math.MaxInt32 {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.SessionIdleTimeoutMinutes == nil {
+		settings.SessionIdleTimeoutMinutes = defaults.SessionIdleTimeoutMinutes
+	}
+	if *settings.SessionIdleTimeoutMinutes < 1 || *settings.SessionIdleTimeoutMinutes > math.MaxInt32 {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.WindowCostLimit != nil && (*settings.WindowCostLimit <= 0 || math.IsNaN(*settings.WindowCostLimit) || math.IsInf(*settings.WindowCostLimit, 0)) {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.WindowCostStickyReserve != nil && (*settings.WindowCostStickyReserve < 0 || math.IsNaN(*settings.WindowCostStickyReserve) || math.IsInf(*settings.WindowCostStickyReserve, 0)) {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.BaseRPM == nil {
+		settings.BaseRPM = defaults.BaseRPM
+	}
+	if *settings.BaseRPM < 0 || *settings.BaseRPM > 10000 {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.RPMStrategy != "" && settings.RPMStrategy != "tiered" && settings.RPMStrategy != "sticky_exempt" {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	if settings.RPMStrategy == "" {
+		settings.RPMStrategy = defaults.RPMStrategy
+	}
+	if settings.RPMStickyBuffer != nil && (*settings.RPMStickyBuffer < 1 || *settings.RPMStickyBuffer > math.MaxInt32) {
+		return ports.AccountSettings{}, failure(400, "INVALID_ACCOUNT_SETTINGS")
+	}
+	return settings, nil
+}
 func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in ports.BeginOnboarding, key string) (Authorization, error) {
 	var zero Authorization
 	store, up, e := s.onboardingPorts()
@@ -58,6 +104,17 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 	}
 	in.GroupID = groupIDs[0]
 	in.GroupIDs = groupIDs
+	var requestedSettings ports.AccountSettings
+	if in.Settings != nil {
+		requestedSettings = *in.Settings
+	}
+	settings, e := normalizeAccountSettings(requestedSettings)
+	if e != nil {
+		return zero, e
+	}
+	if in.Settings != nil {
+		in.Settings = &settings
+	}
 	if e = s.checkGroups(ctx, groupIDs); e != nil {
 		return zero, e
 	}
@@ -66,7 +123,7 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 		return zero, e
 	}
 	b, _ := json.Marshal(in)
-	o := ports.BoundOAuth{OAuthSession: ports.OAuthSession{ID: id, SupplierID: r.Supplier.ID, Name: in.Name, KeyID: s.KeyID, StateHash: auth.Hash(id), ExpiresAt: time.Now().Add(25 * time.Minute)}, Proxy: ports.OwnProxy{ID: in.ProxyID}, GroupID: in.GroupID, GroupIDs: groupIDs, BeginKey: key, RequestHash: s.Vault.Fingerprint("oauth.begin", b)}
+	o := ports.BoundOAuth{OAuthSession: ports.OAuthSession{ID: id, SupplierID: r.Supplier.ID, Name: in.Name, KeyID: s.KeyID, StateHash: auth.Hash(id), ExpiresAt: time.Now().Add(25 * time.Minute)}, Proxy: ports.OwnProxy{ID: in.ProxyID}, GroupID: in.GroupID, GroupIDs: groupIDs, Settings: settings, BeginKey: key, RequestHash: s.Vault.Fingerprint("oauth.begin", b)}
 	o, replay, e := store.ReserveOnboarding(ctx, r, o)
 	if e != nil {
 		return zero, e
@@ -262,7 +319,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err = s.Store.CheckpointAccountOperation(ctx, out, "running", "account_create_started"); err != nil {
 		return out, err
 	}
-	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, targetGroups[0], o.Proxy.UpstreamID)
+	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, targetGroups[0], o.Proxy.UpstreamID, o.Settings)
 	if err != nil {
 		return out, err
 	}

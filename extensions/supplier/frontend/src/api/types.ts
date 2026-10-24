@@ -57,6 +57,16 @@ export interface OwnProxy { id: string; name: string; address: string; region: s
 export interface ProxyInput { name: string; address: string; region: string }
 export interface AccountGroup { id: number; name: string; platform: string; status: string; group_ids?: number[] }
 export interface OnboardingOptions { groups: AccountGroup[]; proxies: OwnProxy[] }
+export interface AccountSettings {
+  concurrency: number
+  window_cost_limit?: number
+  window_cost_sticky_reserve?: number
+  max_sessions?: number
+  session_idle_timeout_minutes?: number
+  base_rpm?: number
+  rpm_strategy?: 'tiered' | 'sticky_exempt'
+  rpm_sticky_buffer?: number
+}
 
 export type UsagePeriod = 'today' | '7d' | '30d' | 'all'
 export interface UsageMetrics {
