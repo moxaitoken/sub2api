@@ -46,6 +46,13 @@ func TestAccountMachineKeyPathsAndCredentialBoundary(t *testing.T) {
 			if input["group_ids"].([]any)[0] != float64(1) {
 				t.Error("quarantine not explicit")
 			}
+			if input["concurrency"] != float64(supplierDefaultConcurrency) {
+				t.Errorf("supplier account concurrency = %v, want %d", input["concurrency"], supplierDefaultConcurrency)
+			}
+			extra, ok := input["extra"].(map[string]any)
+			if !ok || extra["max_sessions"] != float64(supplierDefaultMaxSessions) || extra["session_idle_timeout_minutes"] != float64(supplierDefaultSessionIdleTimeoutMin) {
+				t.Errorf("supplier session defaults = %v", input["extra"])
+			}
 			data = map[string]any{"id": 10, "platform": "anthropic", "type": "oauth", "status": "active", "schedulable": true, "groups": []any{map[string]int{"id": 1}}}
 		default:
 			w.WriteHeader(404)

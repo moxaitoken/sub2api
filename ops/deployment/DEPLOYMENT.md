@@ -89,3 +89,28 @@ Caddy 启用前的环境与配置备份位于 ECS `/opt/sub2api/backups/ingress-
 用户授权将最新提交 `cf569d288156af7e4bf891d544ef7d5ec16ae21c` 部署至现有ECS。对比上一线上源码仅首页默认页脚移除GitHub链接，文档与版权保留。只更新主站镜像 `sub2api-local:home-20261023-171656`；供应商容器ID、镜像及Caddy路由保持不变，env仅SUB2API_IMAGE变更，无迁移/依赖/权限调整。主站构建含i18n/类型检查，首页聚焦测试及同输入BASELINE→MODIFIED→ROLLBACK副本测试通过（旧版/回滚版GitHub缺失断言预期失败，新版通过，回滚源hash一致）。
 
 备份及主站镜像回退：`/opt/sub2api/releases/home-20261023-171656/before`、`/opt/sub2api/releases/home-20261023-171656/ROLLBACK.sh`。两库备份在无网络临时PG中实际恢复校验；回退脚本仅syntax及env副本实际测试，未为测试回退生产。线上健康、主站管理员登录及供应商管理读取、未登录401、首页静态chunk通过；浏览器验收未执行。供应商服务未重启，数据库记录及现有密钥不变。
+
+
+## policy-20261023-181228
+
+用户授权发布已核对工作区快照（基线 `a4195324e70bc08c8cc51b9f62632c4b149b6261` 加manifest精确记录的定制升级策略代码）。仅主站镜像更新为 `sub2api-local:policy-20261023-181228`，供应商容器ID、Caddy、应用环境与数据库schema保持不变。两个原地二进制替换接口返回403/IN_PLACE_UPDATE_DISABLED，版本弹层保留只读提示/刷新；独立Go路由stub和Vue测试通过。先比对部署二进制SHA与已测镜像，再验证新版本拒绝策略，未在旧生产版本调用更新写接口。
+
+备份和主站镜像回退：`/opt/sub2api/releases/policy-20261023-181228/before`、`/opt/sub2api/releases/policy-20261023-181228/ROLLBACK.sh`。两库备份已在隔离PG实际恢复；回滚只对副本实测，未为验证回退生产。旧镜像会重新开放旧的原地升级能力，紧急回退后不得使用该旧功能。公网主站/供应商健康及静态资源通过，无迁移或依赖升级。
+
+
+## group-20261023-202917
+
+用户授权部署当前代码，固定源码 `ac43ab2b591fe88be6db666807752b5c21bd8ace`，完整字节见发布source-manifest。主站 `sub2api-local:group-20261023-202917` 先发布并验证受保护能力查询 `schedulable_on_create=true`，供应商 `sub2api-supplier:group-20261023-202917` 后发布。供应商库新增011分组接入配置/初始化标记/审计表并补运行角色权限；DDL及审计UPDATE/DELETE被拒绝，主站296迁移不变。分组默认关闭（enabled数量0），初始化完成；不自动开放生产分组、不创建真实上游账号/调用/财务写入，保留旧隔离组。新代码不再依赖隔离组先创建，改为直接目标组创建时暂停，归属/配置校验后启用。旧调用省略schedulable仍默认true。
+
+两库及数据卷备份：`/opt/sub2api/releases/group-20261023-202917/before`；两库在隔离PG实际恢复核对。源码同输入BASELINE暂停断言失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，恢复hash一致，patch重建一致。主站/供应商Go、前端及隔离PG测试通过，公网健康/资源与管理员只读API、未登录401通过；浏览器及真实Claude验收未执行。Caddy、域名、密钥、供应商env未变。
+
+**011恢复边界**：旧供应商程序会拒绝未知011，不能只回退旧镜像。服务端 `/opt/sub2api/releases/group-20261023-202917/ROLLBACK.sh` 仅实测还原指定env副本，无参数拒绝exit3以避免错误生产回退。生产恢复需011兼容修复版本，或另行授权维护窗口恢复匹配备份；未执行生产回退，不删除迁移历史。
+
+
+## copy-20261023-210751
+
+用户授权部署最新提交 `c262db5e4f57604b4e7804fad073d64532b68c24`（source-manifest记录固定源码），仅更新供应商门户镜像 `sub2api-supplier:copy-20261023-210751`。AccountOnboardingView展示完整只读授权链接，复制当前URL、成功提示，剪贴板缺失/拒绝时提供手动复制，不新增授权会话。主站容器ID、供应商后端二进制SHA、Caddy、供应商env、011库结构与现有分组不变；无迁移/依赖升级/真实OAuth或模型调用。
+
+完整门户测试/类型/构建通过；3个同输入复制fixture BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，源hash一致、补丁重建一致。两库dump已在无网络临时PG实际恢复。公网HTML/资源与镜像字节一致、健康200、未登录401、www308通过；未执行浏览器渲染验收。
+
+备份和回退：`/opt/sub2api/releases/copy-20261023-210751/before`、`/opt/sub2api/releases/copy-20261023-210751/ROLLBACK.sh`。本次旧供应商镜像为兼容011的group版本，脚本可仅回退供应商镜像env和容器；带一个参数还原env副本已实测，未为验证执行生产回退。禁止使用更早的pre011供应商程序。

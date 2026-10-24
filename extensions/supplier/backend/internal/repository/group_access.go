@@ -8,11 +8,43 @@ import (
 
 func (s *Store) GroupAccess(ctx context.Context, id int64) (ports.GroupAccess, error) {
 	x := ports.GroupAccess{GroupID: id}
-	err := s.db.QueryRowContext(ctx, `SELECT enabled,version FROM supplier.group_access WHERE upstream_instance_id=$1 AND group_id=$2`, s.instanceID, id).Scan(&x.Enabled, &x.Version)
+	err := s.db.QueryRowContext(ctx, `SELECT enabled,version,supplier_group_name FROM supplier.group_access WHERE upstream_instance_id=$1 AND group_id=$2`, s.instanceID, id).Scan(&x.Enabled, &x.Version, &x.SupplierGroupName)
 	if err == sql.ErrNoRows {
 		return x, nil
 	}
 	return x, mapError(err)
+}
+func (s *Store) ListGroupAccess(ctx context.Context) ([]ports.GroupAccess, error) {
+	rows, e := s.db.QueryContext(ctx, `SELECT group_id,enabled,version,supplier_group_name FROM supplier.group_access WHERE upstream_instance_id=$1 ORDER BY group_id`, s.instanceID)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := []ports.GroupAccess{}
+	for rows.Next() {
+		var x ports.GroupAccess
+		if e = rows.Scan(&x.GroupID, &x.Enabled, &x.Version, &x.SupplierGroupName); e != nil {
+			return nil, e
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+func (s *Store) EnabledGroupAccess(ctx context.Context) ([]ports.GroupAccess, error) {
+	rows, e := s.db.QueryContext(ctx, `SELECT group_id,enabled,version,supplier_group_name FROM supplier.group_access WHERE upstream_instance_id=$1 AND enabled ORDER BY group_id`, s.instanceID)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := []ports.GroupAccess{}
+	for rows.Next() {
+		var x ports.GroupAccess
+		if e = rows.Scan(&x.GroupID, &x.Enabled, &x.Version, &x.SupplierGroupName); e != nil {
+			return nil, e
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
 }
 func (s *Store) EnabledGroupIDs(ctx context.Context) ([]int64, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT group_id FROM supplier.group_access WHERE upstream_instance_id=$1 AND enabled ORDER BY group_id`, s.instanceID)
@@ -36,9 +68,9 @@ func (s *Store) SetGroupAccess(ctx context.Context, in ports.GroupAccess, actor 
 	}
 	return transaction(ctx, s.db, func(tx *sql.Tx) (ports.GroupAccess, error) {
 		var version int64
-		e := tx.QueryRowContext(ctx, `INSERT INTO supplier.group_access(upstream_instance_id,group_id,enabled) SELECT $1,$2,$3 WHERE $4::bigint=0 ON CONFLICT(upstream_instance_id,group_id) DO NOTHING RETURNING version`, s.instanceID, in.GroupID, in.Enabled, in.Version).Scan(&version)
+		e := tx.QueryRowContext(ctx, `INSERT INTO supplier.group_access(upstream_instance_id,group_id,enabled,supplier_group_name) SELECT $1,$2,$3,$5 WHERE $4::bigint=0 ON CONFLICT(upstream_instance_id,group_id) DO NOTHING RETURNING version`, s.instanceID, in.GroupID, in.Enabled, in.Version, in.SupplierGroupName).Scan(&version)
 		if e == sql.ErrNoRows {
-			e = tx.QueryRowContext(ctx, `UPDATE supplier.group_access SET enabled=$3,version=version+1,updated_at=now() WHERE upstream_instance_id=$1 AND group_id=$2 AND version=$4 RETURNING version`, s.instanceID, in.GroupID, in.Enabled, in.Version).Scan(&version)
+			e = tx.QueryRowContext(ctx, `UPDATE supplier.group_access SET enabled=$3,supplier_group_name=$5,version=version+1,updated_at=now() WHERE upstream_instance_id=$1 AND group_id=$2 AND version=$4 RETURNING version`, s.instanceID, in.GroupID, in.Enabled, in.Version, in.SupplierGroupName).Scan(&version)
 		}
 		if e == sql.ErrNoRows {
 			return in, ports.ErrConflict
@@ -46,7 +78,7 @@ func (s *Store) SetGroupAccess(ctx context.Context, in ports.GroupAccess, actor 
 		if e != nil {
 			return in, e
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO supplier.group_access_audit(upstream_instance_id,group_id,enabled,actor_id,version) VALUES($1,$2,$3,$4,$5)`, s.instanceID, in.GroupID, in.Enabled, actor, version)
+		_, e = tx.ExecContext(ctx, `INSERT INTO supplier.group_access_audit(upstream_instance_id,group_id,enabled,supplier_group_name,actor_id,version) VALUES($1,$2,$3,$4,$5,$6)`, s.instanceID, in.GroupID, in.Enabled, in.SupplierGroupName, actor, version)
 		in.Version = version
 		return in, e
 	})

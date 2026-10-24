@@ -13,7 +13,7 @@ const safeReasons = new Set([
   'LOGIN_RATE_LIMIT', 'UPSTREAM_UNAUTHORIZED', 'UPSTREAM_FORBIDDEN', 'UPSTREAM_LOCKED',
   'UPSTREAM_RATE_LIMITED', 'UPSTREAM_UNAVAILABLE', 'UPSTREAM_TRANSPORT_ERROR',
   'UPSTREAM_BAD_RESPONSE', 'UPSTREAM_REJECTED', 'UPSTREAM_INVALID_TOKEN',
-  'ACCOUNT_SERVICE_NOT_CONFIGURED', 'INVALID_ACCOUNT_NAME', 'OAUTH_STATE_MISMATCH', 'OAUTH_EXPIRED',
+  'ACCOUNT_SERVICE_NOT_CONFIGURED', 'INVALID_ACCOUNT_NAME', 'INVALID_SUPPLIER_GROUP_NAME', 'OAUTH_STATE_MISMATCH', 'OAUTH_EXPIRED',
   'INVALID_AUTHORIZATION_CODE', 'INVALID_AUTHORIZATION_RESPONSE', 'ACCOUNT_IDENTITY_UNVERIFIED',
   'ACCOUNT_STATE_DRIFT', 'ACCOUNT_STATE_CONFLICT', 'IDEMPOTENCY_KEY_REQUIRED', 'IF_MATCH_REQUIRED',
   'INVALID_SUPPLIER_NAME', 'INVALID_SUPPLIER_LOGIN', 'INVALID_SUPPLIER_PASSWORD',
@@ -225,8 +225,8 @@ export class SupplierClient {
   async onboardingOptions(): Promise<OnboardingOptions> {
     this.supplierOnly()
     const data = await this.request<OnboardingOptions>('/onboarding/options')
-    if (!data || !Array.isArray(data.groups) || !Array.isArray(data.proxies) || data.groups.some(g => !g || !Number.isSafeInteger(g.id) || g.id <= 0 || typeof g.name !== 'string' || g.platform !== 'anthropic' || g.status !== 'active')) throw new ApiError(200,'INVALID_RESPONSE')
-    return { groups: data.groups.map(g => ({id:g.id,name:g.name,platform:g.platform,status:g.status})), proxies: data.proxies.map(p => this.checkedProxy(p)) }
+    if (!data || !Array.isArray(data.groups) || !Array.isArray(data.proxies) || data.groups.some(g => !g || !Number.isSafeInteger(g.id) || g.id <= 0 || typeof g.name !== 'string' || g.platform !== 'anthropic' || g.status !== 'active' || (g.group_ids !== undefined && (!Array.isArray(g.group_ids) || g.group_ids.some(id => !Number.isSafeInteger(id) || id <= 0))))) throw new ApiError(200,'INVALID_RESPONSE')
+    return { groups: data.groups.map(g => ({id:g.id,name:g.name,platform:g.platform,status:g.status,group_ids:g.group_ids?.length ? [...new Set(g.group_ids)] : [g.id]})), proxies: data.proxies.map(p => this.checkedProxy(p)) }
   }
   async ownProxies(): Promise<{items: OwnProxy[]}> {
     this.supplierOnly(); const data = await this.request<{items: OwnProxy[]}>('/proxies'); if (!data || !Array.isArray(data.items)) throw new ApiError(200,'INVALID_RESPONSE'); return {items:data.items.map(p=>this.checkedProxy(p))}
@@ -240,9 +240,10 @@ export class SupplierClient {
   async deleteOwnProxy(id: string): Promise<void> {
     this.supplierOnly(); await this.request(`/proxies/${encodeURIComponent(id)}`, {method:'DELETE'})
   }
-  async beginOnboarding(name: string, proxy: string, group: number, key: string): Promise<Authorization> {
+  async beginOnboarding(name: string, proxy: string, groups: number[], key: string): Promise<Authorization> {
     this.supplierOnly()
-    const data = await this.request<Authorization>('/oauth/sessions', {method:'POST',body:{name,proxy_id:proxy,group_id:group},idempotencyKey:key})
+    const group_ids = [...new Set(groups)].filter(id => Number.isSafeInteger(id) && id > 0)
+    const data = await this.request<Authorization>('/oauth/sessions', {method:'POST',body:{name,proxy_id:proxy,group_ids},idempotencyKey:key})
     try {
       const url = new URL(data.authorization_url)
       if (url.protocol !== 'https:' || url.host !== 'claude.com' || url.pathname !== '/cai/oauth/authorize' || url.username || url.password || url.hash || !url.searchParams.get('state') || !data.id || !Number.isFinite(Date.parse(data.expires_at))) throw new Error('invalid')

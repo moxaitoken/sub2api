@@ -55,7 +55,7 @@ export interface ManagedSupplier extends Supplier {
 
 export interface OwnProxy { id: string; name: string; address: string; region: string; status: 'provisioning' | 'active' | 'disabled' | 'needs_attention' | 'deleting'; capacity: number; accounts: number; held: number; version: number }
 export interface ProxyInput { name: string; address: string; region: string }
-export interface AccountGroup { id: number; name: string; platform: string; status: string }
+export interface AccountGroup { id: number; name: string; platform: string; status: string; group_ids?: number[] }
 export interface OnboardingOptions { groups: AccountGroup[]; proxies: OwnProxy[] }
 
 export type UsagePeriod = 'today' | '7d' | '30d' | 'all'

@@ -44,7 +44,7 @@ describe('manual supplier account onboarding',()=>{
   const {wrapper:w,fetcher:f}=await view([ok(authorization),ok({id:'operation-fixture',action:'oauth.complete',state:'succeeded',step:'created_paused',account_id:'account-fixture'})])
   await w.findAll('select')[1].setValue(proxy.id)
   await w.findAll('button').find(b=>b.text()==='Generate authorization link')!.trigger('click');await flushPromises()
-  expect(JSON.parse(String(f.mock.calls[2][1]?.body))).toEqual({name:'',proxy_id:proxy.id,group_id:2})
+  expect(JSON.parse(String(f.mock.calls[2][1]?.body))).toEqual({name:'',proxy_id:proxy.id,group_ids:[2]})
   expect(new Headers(f.mock.calls[2][1]?.headers).get('Idempotency-Key')).toBeTruthy()
   expect(w.get('a').attributes('href')).toBe(authorization.authorization_url)
   expect(w.get('a').attributes('rel')).toBe('noopener noreferrer')

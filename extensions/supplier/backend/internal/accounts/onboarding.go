@@ -10,6 +10,7 @@ import (
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -17,6 +18,29 @@ import (
 func oauthURL(raw string) bool {
 	u, e := url.Parse(raw)
 	return e == nil && u.Scheme == "https" && u.Host == "claude.com" && u.Path == "/cai/oauth/authorize" && u.User == nil && u.Fragment == "" && u.Query().Get("state") != ""
+}
+func normalizeGroupIDs(in ports.BeginOnboarding) ([]int64, error) {
+	ids := append([]int64(nil), in.GroupIDs...)
+	if len(ids) == 0 && in.GroupID > 0 {
+		ids = []int64{in.GroupID}
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, failure(400, "INVALID_GROUP")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if len(out) == 0 || len(out) > 100 {
+		return nil, failure(400, "INVALID_GROUP")
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
 }
 func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in ports.BeginOnboarding, key string) (Authorization, error) {
 	var zero Authorization
@@ -28,7 +52,13 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 	if len([]rune(in.Name)) > 100 {
 		return zero, failure(400, "INVALID_ACCOUNT_NAME")
 	}
-	if e = s.checkGroup(ctx, in.GroupID); e != nil {
+	groupIDs, e := normalizeGroupIDs(in)
+	if e != nil {
+		return zero, e
+	}
+	in.GroupID = groupIDs[0]
+	in.GroupIDs = groupIDs
+	if e = s.checkGroups(ctx, groupIDs); e != nil {
 		return zero, e
 	}
 	id, e := auth.NewID()
@@ -36,7 +66,7 @@ func (s *Service) BeginLocal(ctx context.Context, r ports.SupplierRecord, in por
 		return zero, e
 	}
 	b, _ := json.Marshal(in)
-	o := ports.BoundOAuth{OAuthSession: ports.OAuthSession{ID: id, SupplierID: r.Supplier.ID, Name: in.Name, KeyID: s.KeyID, StateHash: auth.Hash(id), ExpiresAt: time.Now().Add(25 * time.Minute)}, Proxy: ports.OwnProxy{ID: in.ProxyID}, GroupID: in.GroupID, BeginKey: key, RequestHash: s.Vault.Fingerprint("oauth.begin", b)}
+	o := ports.BoundOAuth{OAuthSession: ports.OAuthSession{ID: id, SupplierID: r.Supplier.ID, Name: in.Name, KeyID: s.KeyID, StateHash: auth.Hash(id), ExpiresAt: time.Now().Add(25 * time.Minute)}, Proxy: ports.OwnProxy{ID: in.ProxyID}, GroupID: in.GroupID, GroupIDs: groupIDs, BeginKey: key, RequestHash: s.Vault.Fingerprint("oauth.begin", b)}
 	o, replay, e := store.ReserveOnboarding(ctx, r, o)
 	if e != nil {
 		return zero, e
@@ -172,7 +202,11 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 		step = "proxy_rejected"
 		return out, err
 	}
-	if err = s.checkGroup(ctx, o.GroupID); err != nil {
+	targetGroups := append([]int64(nil), o.GroupIDs...)
+	if len(targetGroups) == 0 && o.GroupID > 0 {
+		targetGroups = []int64{o.GroupID}
+	}
+	if err = s.checkGroups(ctx, targetGroups); err != nil {
 		knownFailure = true
 		step = "group_rejected"
 		return out, err
@@ -228,12 +262,28 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err = s.Store.CheckpointAccountOperation(ctx, out, "running", "account_create_started"); err != nil {
 		return out, err
 	}
-	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, o.GroupID, o.Proxy.UpstreamID)
+	created, err := up.CreateBoundAccount(ctx, o.Name, out.ID, tokens, targetGroups[0], o.Proxy.UpstreamID)
 	if err != nil {
 		return out, err
 	}
 	account.UpstreamID = created.ID
-	if created.Schedulable || !matches(created, []int64{o.GroupID}) || created.ProxyID == nil || *created.ProxyID != o.Proxy.UpstreamID {
+	if len(targetGroups) > 1 {
+		groupUpdater, ok := up.(interface {
+			SetAccountGroups(context.Context, int64, []int64) error
+			ReadAccount(context.Context, int64) (ports.RemoteAccount, error)
+		})
+		if !ok {
+			return out, ports.ErrUnavailable
+		}
+		if err = groupUpdater.SetAccountGroups(ctx, created.ID, targetGroups); err != nil {
+			return out, err
+		}
+		created, err = groupUpdater.ReadAccount(ctx, created.ID)
+		if err != nil {
+			return out, err
+		}
+	}
+	if created.Schedulable || !matches(created, targetGroups) || created.ProxyID == nil || *created.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
 	if err = s.Upstream.SetAccountSchedulable(ctx, created.ID, false); err != nil {
@@ -243,7 +293,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err != nil {
 		return out, err
 	}
-	if read.ID != created.ID || read.Schedulable || !matches(read, []int64{o.GroupID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
+	if read.ID != created.ID || read.Schedulable || !matches(read, targetGroups) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
 	if err = store.CheckOnboarding(ctx, o); err != nil {
@@ -252,7 +302,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err = s.checkProxy(ctx, o.Proxy); err != nil {
 		return out, err
 	}
-	if err = s.checkGroup(ctx, o.GroupID); err != nil {
+	if err = s.checkGroups(ctx, targetGroups); err != nil {
 		return out, err
 	}
 	// Persist resource ownership before the first enable attempt. A crash after this
@@ -275,7 +325,7 @@ func (s *Service) CompleteLocal(ctx context.Context, supplier, id, code, key str
 	if err != nil {
 		return out, err
 	}
-	if read.ID != created.ID || !read.Schedulable || !matches(read, []int64{o.GroupID}) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
+	if read.ID != created.ID || !read.Schedulable || !matches(read, targetGroups) || read.ProxyID == nil || *read.ProxyID != o.Proxy.UpstreamID {
 		return out, failure(409, "ACCOUNT_STATE_DRIFT")
 	}
 	account.Desired = "running"

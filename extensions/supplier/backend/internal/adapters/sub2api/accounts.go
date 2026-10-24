@@ -16,6 +16,14 @@ type AccountClient struct {
 	key    string
 }
 
+const (
+	// Supplier-created Claude accounts use the same platform defaults as the
+	// main account creation form. Suppliers do not configure these values.
+	supplierDefaultConcurrency           = 100
+	supplierDefaultMaxSessions           = 100
+	supplierDefaultSessionIdleTimeoutMin = 5
+)
+
 func NewAccountClient(origin, key string) (*AccountClient, error) {
 	if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "\r\n") {
 		return nil, fmt.Errorf("server-side admin key required")
@@ -108,7 +116,7 @@ func (c *AccountClient) CreateClaudeAccount(ctx context.Context, name, key strin
 }
 func (c *AccountClient) createClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64, proxy *int64) (ports.RemoteAccount, error) {
 	var result ports.RemoteAccount
-	payload := map[string]any{"name": name, "platform": "anthropic", "type": "oauth", "group_ids": []int64{group}, "concurrency": 1, "priority": 1, "upstream_billing_probe_enabled": false, "credentials": map[string]any{"access_token": tokens.Access, "refresh_token": tokens.Refresh, "expires_at": strconv.FormatInt(tokens.ExpiresAt, 10), "account_uuid": tokens.AccountUUID, "org_uuid": tokens.OrgUUID}}
+	payload := map[string]any{"name": name, "platform": "anthropic", "type": "oauth", "group_ids": []int64{group}, "concurrency": supplierDefaultConcurrency, "priority": 1, "upstream_billing_probe_enabled": false, "extra": map[string]any{"max_sessions": supplierDefaultMaxSessions, "session_idle_timeout_minutes": supplierDefaultSessionIdleTimeoutMin}, "credentials": map[string]any{"access_token": tokens.Access, "refresh_token": tokens.Refresh, "expires_at": strconv.FormatInt(tokens.ExpiresAt, 10), "account_uuid": tokens.AccountUUID, "org_uuid": tokens.OrgUUID}}
 	if proxy != nil {
 		if *proxy <= 0 {
 			return result, ports.ErrForbidden

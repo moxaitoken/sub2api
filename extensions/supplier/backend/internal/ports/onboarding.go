@@ -49,20 +49,23 @@ type RemoteProxy struct {
 	ExpiresAt *int64 `json:"expires_at"`
 }
 type AccountGroup struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Platform string `json:"platform"`
-	Status   string `json:"status"`
+	ID       int64   `json:"id"`
+	Name     string  `json:"name"`
+	Platform string  `json:"platform"`
+	Status   string  `json:"status"`
+	GroupIDs []int64 `json:"group_ids,omitempty"`
 }
 type BeginOnboarding struct {
-	Name    string `json:"name"`
-	ProxyID string `json:"proxy_id"`
-	GroupID int64  `json:"group_id"`
+	Name     string  `json:"name"`
+	ProxyID  string  `json:"proxy_id"`
+	GroupID  int64   `json:"group_id,omitempty"` // legacy single-group clients
+	GroupIDs []int64 `json:"group_ids,omitempty"`
 }
 type BoundOAuth struct {
 	OAuthSession
 	Proxy                                   OwnProxy
 	GroupID                                 int64
+	GroupIDs                                []int64
 	CredentialVersion, SessionEpoch         int64
 	BeginKey, RequestHash, CreatedAccountID string
 }

@@ -293,6 +293,7 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
+      'supplier_group_name',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -319,6 +320,7 @@ describe('admin GroupsView column settings', () => {
       'name',
       'id',
       'platform',
+      'supplier_group_name',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -337,6 +339,7 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
+      'supplier_group_name',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -360,6 +363,7 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
+      'supplier_group_name',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -383,6 +387,7 @@ describe('admin GroupsView column settings', () => {
       'name',
       'id',
       'platform',
+      'supplier_group_name',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',

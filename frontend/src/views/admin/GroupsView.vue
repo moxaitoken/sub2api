@@ -130,6 +130,12 @@
             }}</span>
           </template>
 
+          <template #cell-supplier_group_name="{ row }">
+            <span class="text-sm text-gray-700 dark:text-gray-300">
+              {{ supplierGroupNames.get(row.id) || "—" }}
+            </span>
+          </template>
+
           <template #cell-id="{ value }">
             <span class="font-mono text-xs text-gray-500 dark:text-gray-400"
               >#{{ value }}</span
@@ -709,6 +715,9 @@
         <div v-if="createForm.platform === 'anthropic'">
           <label class="flex items-center gap-3"><input v-model="createSupplierAccess" type="checkbox" role="switch" :aria-checked="createSupplierAccess" /><span>{{ t('supplierPortal.groupAccess.label') }}</span></label>
           <p class="input-hint">{{ t('supplierPortal.groupAccess.hint') }}</p>
+          <label class="input-label mt-3">{{ t('admin.groups.form.supplierGroupName') }}</label>
+          <input v-model="createSupplierGroupName" maxlength="100" type="text" class="input" />
+          <p class="input-hint">{{ t('admin.groups.form.supplierGroupNameHint') }}</p>
         </div>
         <!-- Subscription Configuration -->
         <div class="mt-4 border-t pt-4">
@@ -4480,20 +4489,21 @@ const allColumns = computed<Column[]>(() => {
     { key: "name", label: t("admin.groups.columns.name"), sortable: true },
     { key: "id", label: t("admin.groups.columns.id"), sortable: true },
     { key: "platform", label: t("admin.groups.columns.platform"), sortable: true },
+    { key: "supplier_group_name", label: t("admin.groups.columns.supplierGroup"), sortable: false },
     { key: "account_count", label: t("admin.groups.columns.accounts"), sortable: true },
     { key: "status", label: t("admin.groups.columns.status"), sortable: true },
     { key: "actions", label: t("admin.groups.columns.actions"), sortable: false },
   ];
   if (authStore.isSimpleMode) return basic;
   return [
-    ...basic.slice(0, 3),
+    ...basic.slice(0, 4),
     { key: "billing_type", label: t("admin.groups.columns.billingType"), sortable: true },
     { key: "rate_multiplier", label: t("admin.groups.columns.rateMultiplier"), sortable: true },
     { key: "is_exclusive", label: t("admin.groups.columns.type"), sortable: true },
-    basic[3],
+    basic[4],
     { key: "capacity", label: t("admin.groups.columns.capacity"), sortable: false },
     { key: "usage", label: t("admin.groups.columns.usage"), sortable: false },
-    ...basic.slice(4),
+    ...basic.slice(5),
   ];
 });
 
@@ -4790,6 +4800,7 @@ const copyAccountsGroupOptionsForEdit = computed(() => {
 });
 
 const groups = ref<AdminGroup[]>([]);
+const supplierGroupNames = ref<Map<number, string>>(new Map());
 const loading = ref(false);
 type GroupUsageSummary = {
   today_cost: number;
@@ -4832,6 +4843,7 @@ const sortState = reactive({
 let abortController: AbortController | null = null;
 
 const createSupplierAccess = ref(false);
+const createSupplierGroupName = ref("");
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showDeleteDialog = ref(false);
@@ -5633,6 +5645,20 @@ const loadGroups = async () => {
     groups.value = response.items;
     pagination.total = response.total;
     pagination.pages = response.pages;
+    if (typeof supplierGroupAPI.list === "function") {
+      try {
+        const access = await supplierGroupAPI.list();
+        const names = new Map<number, string>();
+        const groupsByID = new Map(response.items.map((item) => [item.id, item]));
+        for (const item of access.items || []) {
+          const name = item.supplier_group_name?.trim() || groupsByID.get(item.group_id)?.name?.trim();
+          if (name) names.set(item.group_id, name);
+        }
+        supplierGroupNames.value = names;
+      } catch {
+        // Supplier access is optional; the main group table remains usable.
+      }
+    }
     if (hasVisibleUsageSummaryConsumer.value) {
       loadUsageSummary();
     } else {
@@ -5785,6 +5811,7 @@ const closeCreateModal = () => {
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
   createSupplierAccess.value = false;
+  createSupplierGroupName.value = "";
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6043,8 +6070,8 @@ const handleCreateGroup = async () => {
         }
       : requestData;
     const createdGroup = await adminAPI.groups.create(payload);
-    if (createSupplierAccess.value && createdGroup.platform === 'anthropic') {
-      try { await supplierGroupAPI.set(createdGroup.id, true, 0); }
+    if (createdGroup.platform === 'anthropic' && (createSupplierAccess.value || createSupplierGroupName.value.trim())) {
+      try { await supplierGroupAPI.set(createdGroup.id, createSupplierAccess.value, 0, createSupplierGroupName.value.trim()); }
       catch {
         closeCreateModal(); loadGroups(); await handleEdit(createdGroup);
         appStore.showError(t('supplierPortal.groupAccess.createdPartial'));

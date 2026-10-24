@@ -5,7 +5,8 @@
 ## 行为与接口
 
 - 创建 Anthropic 分组可勾选接入；已有分组在编辑弹窗独立读取/保存接入设置。独立保存按钮避免把跨服务的两次写操作伪装成原子操作。创建分组成功但接入设置失败时转编辑窗口，不重试创建分组。
-- `GET/PUT /api/supplier/admin/v1/groups/{id}/access` 使用现有主站管理员 Bearer 或管理员 Cookie/CSRF，写请求校验 Origin；PUT body `{enabled:boolean}`，`If-Match` 为读取到的版本（不存在时0）。冲突409；不允许非管理员写入。开启时服务端检查上游ID、Anthropic、active；已失效分组仍允许关闭。
+- `GET/PUT /api/supplier/admin/v1/groups/{id}/access` 使用现有主站管理员 Bearer 或管理员 Cookie/CSRF，写请求校验 Origin；PUT body `{enabled:boolean,supplier_group_name?:string}`，`If-Match` 为读取到的版本（不存在时0）。冲突409；不允许非管理员写入。开启时服务端检查上游ID、Anthropic、active；已失效分组仍允许关闭。供应商分组名留空时回退主站分组名。
+- `GET /api/supplier/admin/v1/groups/access` 返回所有实际分组的接入开关、版本和供应商分组名，供主站列表显示。多个实际 Anthropic 分组可以配置相同供应商分组名；供应商门户会去重显示，授权完成后将账号绑定到该名称对应的全部实际分组。
 - 设置在供应商库 `group_access`，按 upstream instance + group ID 归属，版本控制；每次变更同事务追加实际管理员审计。主站分组 schema、公开/专属、倍率、用户扣费及供应商采购原价不变。
 - 启动仅一次导入旧 `SUPPLIER_APPROVED_GROUP_IDS`；初始化标记和导入同事务，以后重启不会用旧环境变量覆盖管理员开关。该变量不再是持续配置源。默认无开放分组。关闭不移动/暂停已有账号；尚未完成的授权重新校验分组。
 - 不再读取或要求 `SUPPLIER_QUARANTINE_GROUP_ID`。旧组和既有账号不自动删除、迁移或启用。历史 LegacyTestMode 代码只用于旧协议回归，生产不注册。

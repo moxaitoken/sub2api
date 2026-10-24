@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -153,6 +154,54 @@ func (s *Service) Groups(ctx context.Context) ([]ports.AccountGroup, error) {
 		return nil, e
 	}
 	out := []ports.AccountGroup{}
+	if lister, ok := s.GroupPolicies.(ports.GroupAccessLister); ok {
+		access, err := lister.EnabledGroupAccess(ctx)
+		if err != nil {
+			return nil, err
+		}
+		byName := make(map[string]ports.AccountGroup)
+		for _, item := range access {
+			if !item.Enabled || item.GroupID <= 0 {
+				continue
+			}
+			g, err := up.AccountGroup(ctx, item.GroupID)
+			if err != nil {
+				return nil, err
+			}
+			if g.ID != item.GroupID || g.Platform != "anthropic" || g.Status != "active" {
+				continue
+			}
+			name := strings.TrimSpace(item.SupplierGroupName)
+			if name == "" {
+				name = strings.TrimSpace(g.Name)
+			}
+			if name == "" {
+				continue
+			}
+			group, exists := byName[name]
+			if !exists {
+				group = ports.AccountGroup{ID: g.ID, Name: name, Platform: g.Platform, Status: g.Status}
+			}
+			if !containsID(group.GroupIDs, g.ID) {
+				group.GroupIDs = append(group.GroupIDs, g.ID)
+			}
+			if group.ID == 0 || g.ID < group.ID {
+				group.ID = g.ID
+			}
+			byName[name] = group
+		}
+		for _, group := range byName {
+			sort.Slice(group.GroupIDs, func(i, j int) bool { return group.GroupIDs[i] < group.GroupIDs[j] })
+			out = append(out, group)
+		}
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].Name == out[j].Name {
+				return out[i].ID < out[j].ID
+			}
+			return out[i].Name < out[j].Name
+		})
+		return out, nil
+	}
 	ids := s.ApprovedGroups
 	if s.GroupPolicies != nil {
 		ids, e = s.GroupPolicies.EnabledGroupIDs(ctx)
@@ -168,21 +217,43 @@ func (s *Service) Groups(ctx context.Context) ([]ports.AccountGroup, error) {
 		if g.ID != id || g.Platform != "anthropic" || g.Status != "active" {
 			continue
 		}
+		g.GroupIDs = []int64{g.ID}
 		out = append(out, g)
 	}
 	return out, nil
 }
+func containsID(ids []int64, want int64) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
+}
 func (s *Service) checkGroup(ctx context.Context, id int64) error {
+	return s.checkGroups(ctx, []int64{id})
+}
+func (s *Service) checkGroups(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return ports.ErrForbidden
+	}
 	groups, e := s.Groups(ctx)
 	if e != nil {
 		return e
 	}
-	for _, g := range groups {
-		if g.ID == id {
-			return nil
+	for _, id := range ids {
+		found := false
+		for _, g := range groups {
+			if containsID(g.GroupIDs, id) || g.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ports.ErrForbidden
 		}
 	}
-	return ports.ErrForbidden
+	return nil
 }
 func (s *Service) checkProxy(ctx context.Context, p ports.OwnProxy) error {
 	_, up, e := s.onboardingPorts()

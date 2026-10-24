@@ -10,17 +10,18 @@ const props = defineProps<{ client: SupplierClient }>()
 const emit = defineEmits<{ close: []; created: [] }>()
 const { t } = useSupplierI18n()
 const options = ref<OnboardingOptions>({ groups: [], proxies: [] }), loading = ref(true), busy = ref(false), error = ref<unknown>(null)
-const name = ref(''), group = ref(0), source = ref('existing'), proxyID = ref(''), code = ref(''), advanced = ref(false)
+const name = ref(''), selectedGroupKeys = ref<number[]>([]), source = ref('existing'), proxyID = ref(''), code = ref(''), advanced = ref(false)
 const authorization = ref<Authorization | null>(null), operation = ref<AccountOperation | null>(null), submitted = ref(false)
 const authorizationUrlInput = ref<HTMLTextAreaElement | null>(null)
 const copying = ref(false), copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 const beginKey = ref(crypto.randomUUID()), completeKey = ref(crypto.randomUUID())
 const eligible = computed(() => options.value.proxies.filter(p => p.status === 'active' && p.accounts + p.held < p.capacity))
-const canBegin = computed(() => !loading.value && !busy.value && group.value > 0 && (source.value === 'auto' ? eligible.value.length > 0 : source.value === 'existing' && eligible.value.some(p => p.id === proxyID.value)))
+const selectedGroupIds = computed(() => options.value.groups.filter(item => selectedGroupKeys.value.includes(item.id)).flatMap(item => item.group_ids?.length ? item.group_ids : [item.id]))
+const canBegin = computed(() => !loading.value && !busy.value && selectedGroupIds.value.length > 0 && (source.value === 'auto' ? eligible.value.length > 0 : source.value === 'existing' && eligible.value.some(p => p.id === proxyID.value)))
 let alive = true, poll: ReturnType<typeof setTimeout> | undefined
 async function load() {
   loading.value = true; error.value = null
-  try { const data = await props.client.onboardingOptions(); if (!alive) return; options.value = data; if (!group.value) group.value = data.groups[0]?.id || 0 }
+  try { const data = await props.client.onboardingOptions(); if (!alive) return; options.value = data; if (!selectedGroupKeys.value.length) selectedGroupKeys.value = data.groups[0] ? [data.groups[0].id] : [] }
   catch (cause) { if (alive) error.value = cause }
   finally { if (alive) loading.value = false }
 }
@@ -28,7 +29,7 @@ async function proxyCreated(proxy: OwnProxy) { source.value = 'existing'; proxyI
 async function begin() {
   if (!canBegin.value) return
   busy.value = true; error.value = null
-  try { const data = await props.client.beginOnboarding(name.value.trim(), source.value === 'auto' ? '' : proxyID.value, group.value, beginKey.value); if (alive) authorization.value = data }
+  try { const data = await props.client.beginOnboarding(name.value.trim(), source.value === 'auto' ? '' : proxyID.value, selectedGroupIds.value, beginKey.value); if (alive) authorization.value = data }
   catch (cause) { if (alive) error.value = cause }
   finally { if (alive) busy.value = false }
 }
@@ -93,7 +94,7 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = '' })
           <p v-if="!eligible.length" class="onboarding-warning">{{ t('onboarding.noProxy') }}</p>
           <p v-if="source === 'auto'" class="onboarding-hint">{{ t('onboarding.autoProxyHint') }}</p>
         </div>
-        <div class="onboarding-form"><label>{{ t('onboarding.group') }}<select v-model="group" :disabled="busy"><option v-if="!options.groups.length" :value="0">{{ t('onboarding.noGroup') }}</option><option v-for="item in options.groups" :key="item.id" :value="item.id">{{ item.name }}</option></select></label></div>
+        <div class="onboarding-form"><label>{{ t('onboarding.group') }}<select v-model="selectedGroupKeys" multiple size="4" :disabled="busy"><option v-if="!options.groups.length" :value="0">{{ t('onboarding.noGroup') }}</option><option v-for="item in options.groups" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><p v-if="options.groups.length > 1" class="onboarding-hint">{{ t('onboarding.groupMultiHint') }}</p></div>
         <button class="text-button" type="button" :aria-expanded="advanced" @click="advanced = !advanced">{{ t('onboarding.advanced') }} ⌄</button><div v-if="advanced" class="onboarding-form"><label>{{ t('accounts.name') }}<input v-model="name" maxlength="100" :placeholder="t('onboarding.nameHint')" :disabled="busy" /></label></div>
         <p class="onboarding-hint">{{ t('onboarding.schedulingHint') }}</p><button class="primary wide" :disabled="!canBegin" @click="begin">{{ t(busy ? 'auth.submitting' : 'onboarding.generate') }}</button>
       </template>
