@@ -106,6 +106,7 @@ erDiagram
 
 - 密码散列用成熟KDF（优先主站已依赖的Go crypto库），随机salt和可升级参数；10–64字符、字母+数字；错误/不存在/停用统一提示并限速，散列不入列表/详情。supplier凭据和主站admin认证不混用。
 - 复用现有HttpOnly/Secure/SameSite Cookie、Origin/CSRF与加密实现。supplier/admin可共用sessions表但Cookie及kind隔离，AAD含kind/主体；每请求核对状态/credential_version/session_epoch。停用或重置在事务内递增epoch并撤旧会话；不改变供给账号。
+- 2026-10-26 已确认：供应商本地登录会话自登录起固定7天（168小时），Cookie与数据库expires_at一致；取消供应商空闲30分钟失效，不随活动滚动续期。到期含边界即拒绝；退出、停用、重置密码、epoch、密钥和既有客户端绑定校验保持生效。仅新登录会话使用7天，已有会话不回填延期；不修改主站管理员会话、管理员模块Cookie或Claude OAuth Token/授权码有效期。无需数据库迁移或前端持久保存Token；仅发布供应商后端后生效。回退代码后建议重新登录；已签发的7天期限仍存于数据库，回退不会自动改回8小时，也不允许复活已撤销会话。
 - 管理员每次校验主站profile ID/admin/active，敏感操作前复核；不绕过2FA/合规/step-up。上游机器Key仅固定服务端适配器持有，实际操作者另记审计。
 - 密码、Gmail应用密码、代理认证、code/Token不进日志/URL/前端持久存储。临时秘密复用operations已有分域加密字段、key_id和期限，完成/明确失败后清除，不建专用secret系统。Claude长期凭据留主站；代理临时创建材料确认成功后擦除。
 - 代理检测及正式出站都需防SSRF、DNS重绑定、元数据/私网/loopback/IPv6变体和直连fallback，固定检测目标；单次输入解析不能保证网关安全。现有主站无法强制时列能力缺口，不上线假安全实现。

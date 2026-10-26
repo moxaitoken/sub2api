@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestR2IdentityWithRealPostgres(t *testing.T) {
@@ -204,6 +205,9 @@ func TestR2IdentityWithRealPostgres(t *testing.T) {
 	want(w, 200)
 	want(call("POST", "/api/supplier/v1/auth/login", encode(map[string]string{"login_account": "vendor_01", "password": strings.TrimSpace(initialPassword)}), nil, "", "", ""), 401)
 	sc := cookie(w, "__Host-supplier_session")
+	if !sc.Secure || !sc.HttpOnly || sc.SameSite != http.SameSiteLaxMode || sc.Path != "/" || time.Until(sc.Expires) < 7*24*time.Hour-5*time.Second || time.Until(sc.Expires) > 7*24*time.Hour {
+		t.Fatal("supplier cookie must retain protections and expire in seven days")
+	}
 	w = call("GET", "/api/supplier/v1/me", "", sc, "", "", "")
 	want(w, 200)
 	supplierData := data(w)
@@ -287,6 +291,30 @@ func TestR2IdentityWithRealPostgres(t *testing.T) {
 	if wins != 1 {
 		t.Fatal("duplicate concurrent accounts", wins)
 	}
+	// Fixed seven-day lifetime also survives an idle period through the real
+	// session repository and HTTP route. Existing sessions are not extended.
+	t.Run("supplier fixed lifetime through PostgreSQL and HTTP", func(t *testing.T) {
+		start := time.Now().UTC().Truncate(time.Second)
+		now := start
+		local.Now = func() time.Time { return now }
+		defer func() { local.Now = nil }()
+		w := call("POST", "/api/supplier/v1/auth/login", encode(map[string]string{"login_account": "vendor_01", "password": resetPassword}), nil, "", "", "")
+		want(w, 200)
+		c := cookie(w, "__Host-supplier_session")
+		var expiry time.Time
+		if err := db.QueryRow(`SELECT expires_at FROM supplier.supplier_sessions WHERE session_hash=decode($1,'hex')`, auth.Hash(c.Value)).Scan(&expiry); err != nil || !expiry.Equal(start.Add(7*24*time.Hour)) || !c.Expires.Equal(expiry) {
+			t.Fatal("cookie/persisted expiry differ", err)
+		}
+		for _, elapsed := range []time.Duration{31 * time.Minute, 6 * 24 * time.Hour, 7*24*time.Hour - time.Second} {
+			now = start.Add(elapsed)
+			want(call("GET", "/api/supplier/v1/me", "", c, "", "", ""), 200)
+		}
+		now = start.Add(7 * 24 * time.Hour)
+		want(call("GET", "/api/supplier/v1/me", "", c, "", "", ""), 401)
+		if err := db.QueryRow(`SELECT expires_at FROM supplier.supplier_sessions WHERE session_hash=decode($1,'hex')`, auth.Hash(c.Value)).Scan(&expiry); err != nil || !expiry.Equal(start.Add(7*24*time.Hour)) {
+			t.Fatal("activity must not slide expiry", err)
+		}
+	})
 	// Revoking the real admin role invalidates the management session.
 	up.ProfileValue.Role = "user"
 	want(call("GET", "/api/supplier/admin/v1/suppliers", "", ac, "", "", ""), 403)

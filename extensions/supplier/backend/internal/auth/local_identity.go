@@ -12,6 +12,10 @@ import (
 
 var loginName = regexp.MustCompile(`^[A-Za-z0-9_.@-]{4,64}$`)
 
+// Supplier portal sessions have a fixed lifetime; activity never renews it.
+// Administrator and upstream OAuth token lifetimes are independent.
+const localSupplierSessionLifetime = 7 * 24 * time.Hour
+
 func NormalizeLogin(value string) (string, bool) {
 	value = strings.TrimSpace(value)
 	return strings.ToLower(value), loginName.MatchString(value)
@@ -42,7 +46,7 @@ func (s *Service) LocalLogin(ctx context.Context, login, password string, info p
 		return Login{}, err
 	}
 	row := ports.Session{ID: id, Hash: Hash(cookie), InstanceID: s.InstanceID, Kind: "local_supplier", SupplierID: record.Supplier.ID,
-		KeyID: s.KeyID, CSRFHash: Hash(csrf), ClientHash: binding(info), ExpiresAt: s.now().Add(8 * time.Hour), LastSeenAt: s.now(), Version: 1,
+		KeyID: s.KeyID, CSRFHash: Hash(csrf), ClientHash: binding(info), ExpiresAt: s.now().Add(localSupplierSessionLifetime), LastSeenAt: s.now(), Version: 1,
 		CredentialVersion: record.CredentialVersion, SessionEpoch: record.SessionEpoch}
 	row.Cipher, err = s.Vault.seal(row, secrets{CSRF: csrf})
 	if err != nil {
@@ -61,7 +65,7 @@ func (s *Service) LocalDo(ctx context.Context, cookie, csrf string, write bool, 
 	var value secrets
 	var outcome error
 	err := s.Local.WithSession(ctx, Hash(cookie), func(x *ports.Session) error {
-		if x.Kind != "local_supplier" || x.InstanceID != s.InstanceID || x.Revoked || x.KeyID != s.KeyID || x.ClientHash != binding(info) || !s.now().Before(x.ExpiresAt) || s.now().Sub(x.LastSeenAt) >= 30*time.Minute {
+		if x.Kind != "local_supplier" || x.InstanceID != s.InstanceID || x.Revoked || x.KeyID != s.KeyID || x.ClientHash != binding(info) || !s.now().Before(x.ExpiresAt) {
 			return ports.ErrUnauthenticated
 		}
 		var err error
