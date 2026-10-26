@@ -20,6 +20,9 @@ func (s *Server) registerIdentityRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/supplier/v1/accounts", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
 		return s.identityAccounts(w, r, record.Supplier.ID)
 	}))
+	mux.HandleFunc("GET /api/supplier/v1/accounts/overview", s.localAuthorize(false, func(w http.ResponseWriter, r *http.Request, record ports.SupplierRecord, _ string) error {
+		return s.accountOverview(w, r, record.Supplier.ID)
+	}))
 	admin := &Server{service: s.cfg.Admin, cfg: s.cfg, cookieName: "__Host-supplier_admin", challengeName: "__Host-supplier_admin_challenge", attempts: make(map[string]bucket)}
 	if s.cfg.InsecureLocalhost {
 		admin.cookieName = "supplier_admin"
@@ -49,6 +52,16 @@ func (s *Server) registerIdentityRoutes(mux *http.ServeMux) {
 			return err
 		}
 		return s.identityAccounts(w, r.WithContext(ports.WithAdminActor(r.Context(), p.Me.User.ID)), id)
+	}))
+	mux.HandleFunc("GET /api/supplier/admin/v1/suppliers/{id}/accounts/overview", admin.authorizeAdmin(false, func(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
+		id := r.PathValue("id")
+		if !uuid.MatchString(id) {
+			return ports.ErrNotFound
+		}
+		if _, err := s.cfg.Suppliers.Store.ManagedSupplier(r.Context(), id); err != nil {
+			return err
+		}
+		return s.accountOverview(w, r, id)
 	}))
 }
 func (s *Server) localLogin(w http.ResponseWriter, r *http.Request) {

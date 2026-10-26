@@ -83,6 +83,33 @@ func TestR2LocalOnboarding(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		var data any
 		switch {
+		case r.URL.Path == "/api/v1/admin/accounts/runtime/batch":
+			var input struct {
+				IDs []int64 `json:"account_ids"`
+			}
+			json.NewDecoder(r.Body).Decode(&input)
+			values := map[int64]any{}
+			for _, id := range input.IDs {
+				if _, ok := remoteAccounts[id]; !ok {
+					t.Error("unknown/foreign runtime ID", id)
+				}
+				values[id] = map[string]any{"rpm": 7, "concurrency": 2, "tokens": "13", "uncached_tokens": "5"}
+			}
+			data = map[string]any{"sampled_at": time.Now().UTC(), "rpm_window": "current_minute", "token_window_seconds": 60, "accounts": values}
+		case r.URL.Path == "/api/v1/admin/accounts/usage/batch":
+			var input struct {
+				IDs   []int64 `json:"account_ids"`
+				Force bool    `json:"force"`
+			}
+			json.NewDecoder(r.Body).Decode(&input)
+			if input.Force {
+				t.Error("active quota request")
+			}
+			values := map[int64]any{}
+			for _, id := range input.IDs {
+				values[id] = map[string]any{"source": "passive", "updated_at": time.Now().UTC(), "five_hour": map[string]any{"utilization": 95, "resets_at": time.Now().Add(time.Hour)}}
+			}
+			data = map[string]any{"usage": values}
 		case r.URL.Path == "/api/v1/admin/accounts/creation-capabilities":
 			data = map[string]bool{"schedulable_on_create": true}
 		case r.URL.Path == "/api/v1/admin/groups/1":
@@ -447,6 +474,26 @@ func TestR2LocalOnboarding(t *testing.T) {
 	}
 	// Unknown external create must keep its reservation/account fence and never replay.
 	// A main-site administrator repairs an account outside the supplier workflow.
+	w = call("GET", "/api/supplier/v1/accounts/overview?account_id=999&supplier_id="+second.ID, nil, c1, "", "")
+	want(w, 200)
+	var overviewBody struct{ Data ports.PoolOverview }
+	if e = json.Unmarshal(w.Body.Bytes(), &overviewBody); e != nil {
+		t.Fatal(e)
+	}
+	if overviewBody.Data.RPM.Total != 1 || overviewBody.Data.RPM.Known != 1 || *overviewBody.Data.RPM.Value != "7" || *overviewBody.Data.TPM.Value != "13" {
+		t.Fatal("overview not pinned to current supplier", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "credentials") || strings.Contains(w.Body.String(), "upstream_account_id") {
+		t.Fatal("overview leaked fields")
+	}
+	w = call("GET", "/api/supplier/v1/accounts/overview", nil, c2, "", "")
+	want(w, 200)
+	json.Unmarshal(w.Body.Bytes(), &overviewBody)
+	if overviewBody.Data.RPM.Total != 0 || *overviewBody.Data.RPM.Value != "0" {
+		t.Fatal("foreign accounts included", w.Body.String())
+	}
+	want(call("GET", "/api/supplier/v1/accounts/overview", nil, nil, "", ""), 401)
+	want(call("GET", "/api/supplier/admin/v1/suppliers/"+first.ID+"/accounts/overview", nil, c1, "", ""), 401)
 	if _, e = db.Exec(`UPDATE supplier.supplier_accounts SET admission_state='needs_attention',desired_state='paused',version=version+1 WHERE id=$1`, items[0].ID); e != nil {
 		t.Fatal(e)
 	}

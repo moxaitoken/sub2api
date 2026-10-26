@@ -12,7 +12,7 @@
 | 累计消耗 | 该账号模块内保留的全部已同步官方标准消耗，不乘用户分组/账号倍率，不等于已入账美分余额 |
 | 已记录请求数 | 用量统计既有 `record_count`；仅落库用量记录，失败/重试尝试可能不包含 |
 
-实时 RPM、TPM、不含缓存 TPM、实时并发、高负载及 Claude 5h/7d/Fable 配额仍未接入。不会用配置值、日累计或模拟数据代替。此文只说明代码与隔离测试，不代表真实 Claude 非零消费或生产发布验收。
+概览的运行监控及 Claude 被动配额接入方式见下节。不用配置值、日累计或模拟数据代替实时值；此文只说明代码与隔离测试，不代表真实 Claude 非零消费或生产发布验收。
 
 ## 兼容接口
 
@@ -52,8 +52,43 @@
 
 验收：历史 `needs_attention/paused` 在主站正常、调度开启后变为 `approved/running` 且实际落库；关闭调度后为 `approved/paused`；读取失败/冲突有明确提示；并发更新、进行中账号/OAuth、跨供应商、软删除及审计失败不会被错误覆盖。验证只用本地一次性 PostgreSQL、合成主站及 UI；生产需单独发布授权。代码回退不自动撤销已经同步的主站观察值，更不会恢复主站账号状态。
 
-## 验证入口
+## 运行概览与配额（2026-10-24 授权）
+
+用户确认 RPM 沿用主站现有自然分钟口径，不再实现滚动60秒请求尝试计数。首期不采集额外请求事件：
+
+| 字段 | 实际来源/口径 |
+| --- | --- |
+| RPM | 读取主站现有 `rpm:{account}:{自然分钟}` Redis 键；限速未启用则不提供该账号 RPM，不能伪装成 0；不更改递增或限流算法 |
+| TPM | 主站 `usage_logs.created_at` 最近60秒 `[采样时间-60s,采样时间)` 已落库记录的 input+output+cache_write+cache_read；不按费用倍率缩放、不估算未返回/未落库的流式 Token，不等于每个Token实际产生时刻的采样 |
+| TPM不含缓存 | 相同窗口下 input+output |
+| 实时并发 | 主站现有账号槽位计数（含现有活跃租约）；沿用既有过期槽位清理规则；不是配置并发上限 |
+| 配额 | 主站既有批量 usage 对 Anthropic 使用被动快照，不主动调用 Claude；保留5h/7d/Fable（主站 `seven_day_fable`），不猜不存在的模型窗口 |
+| 高负载 | 任一有效快照窗口≥90%的账号数；有完整三窗口且都低于90%时才确定为非高负载。缺失窗口不能断言低负载，不自动停用/限速 |
+
+### 接口与归属
+
+- 新增主站管理员只读投影 `POST /api/v1/admin/accounts/runtime/batch`，`account_ids` 必填1–100个正数、去重。沿用管理鉴权、合规和面板限流，不给供应商暴露主站密钥；只返回所请求 Anthropic OAuth/SetupToken 账号的 rpm/concurrency/tokens/uncached_tokens、sampled_at 及口径常量，不返回凭据、用户或Key。
+- 主站新service/repository方法仅用于读取。Redis/PG错误、功能缺失返回相应 null，不用既有部分接口的失败回落0。Token用numeric聚合和十进制字符串，复用已有 account_id/created_at 索引。无迁移/新表/计数器，限速、选号、转发和计费代码不变。
+- 批量接口沿用主站现有管理审计策略（POST读取也可能记录），不绕过审计；5秒合并缓存限制重复读取。生产账号规模、PG查询延迟及审计日志增长仍需发布后观测，不承诺本轮完成容量基准。
+- 供应商新增 `GET /api/supplier/v1/accounts/overview`；主站管理对应 `/api/supplier/admin/v1/suppliers/{id}/accounts/overview`。身份/目标供应商仍由既有服务端鉴权确定，忽略浏览器任意主站ID；只从模块库按supplier+instance取得全部未软删除映射，不受当前页、搜索或分组过滤影响；多组账号不重复统计。临时未建好映射记入总量但指标未知。
+- 主站按100个账号分块，单供应商最多4路、服务实例最多8路并发，共享6秒预算；超过预算返回已取得覆盖数，缺项不是0。聚合数量用big.Int避免JS/64位溢出。
+- 返回每指标 value/known/total/status（ok/partial/unavailable）；部分值标明已获取覆盖数。total0的数值指标为真实0。运行采样超过15秒、配额快照超过5分钟或窗口已重置不作为有效数据。
+- 配额概览显示“账号最高使用率”及有效覆盖数，保留该最大值账号快照/重置时间；不是百分比相加、简单平均或池总容量。账号行也读取本账号快照；未知显示—。
+
+### 刷新、缓存与失败
+
+共享资源组件在账号页可见时每5秒轮询概览，切页/隐藏/退出/卸载取消后续轮询并忽略旧请求结果；手动刷新也刷新概览。刷新不触发账号列表的状态镜像或其他管理动作。概览错误保留列表但清除监控旧值，显示不可用；自动轮询不重叠；手动刷新通过模块singleflight合并。
+
+模块每供应商5秒内共享结果，singleflight合并门户/管理员读取；RPM缓存不跨自然分钟。配额读取每分钟一次，权限/归属列表每次重新读取，账号映射变化即失效。缓存至多256个供应商、每供应商至多10000条映射，超过返回不可用，不能只用前10000条冒充完整。没有独立后台服务或持久化监控数据。显示监控采样时间、配额读取时间及快照/重置时间，不能用账号列表刷新时间冒充采样时间。主站/模块时间偏差超过容忍度则不使用样本。
+
+先更新主站批量接口，再更新模块与两端前端；旧主站无runtime接口时运行指标不可用，配额仍可独立读取。旧模块无overview时新前端显示不可用，不影响旧账号列表/授权。代码回退可分别关闭新读取，不回滚业务数据或清Redis。
+
+验收覆盖自然分钟切换、零值/未启用/Redis错误、SQL时间上下界/原始Token/大整数、主站管理权限、批量白名单、跨供应商隔离、25+账号全量统计、多组去重、单项失败、过期快照、隐藏/卸载与切供应商竞态。仅一次性PG、miniredis、合成HTTP/UI验证；生产资源、真实Claude及容量基准未在本轮测试。
+
+### 验证命令
 
 - 模块 Go 单元/适配器：`go test ./internal/accounts ./internal/adapters/sub2api`。
 - 项目隔离工具 `extensions/supplier/tests/integration/run_backend_checks.py --output EXTERNAL_PATH`：一次性 PostgreSQL，SQL 精度/日界/缺口、HTTP 归属与失败路径；不连接生产。
 - 供应商前端 `pnpm run build`；主站前端 `pnpm run typecheck` 及供应商视图 Vitest。
+- 主站聚焦：`go test -tags=unit -run '^TestAccountRuntime' ./internal/handler/admin ./internal/repository`、对应包 `go vet`、`go build ./cmd/server`；管理前端还运行 `src/api/admin/__tests__/suppliers.spec.ts`。
+- 主站 `account_runtime_integration_test.go` 需要显式隔离 `SUPPLIER_TEST_DATABASE_URL`（仅127.0.0.1/supplier_repository_test）。本轮将 repository 的全部生产 Go 文件与该测试文件显式传给 `go test`，绕过无关的包级多容器 TestMain；只建立会话临时表验证真实PG窗口/大整数。它不是主站整套集成测试通过的声明。

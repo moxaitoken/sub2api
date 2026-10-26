@@ -22,8 +22,17 @@ it('locks all resource calls to one supplier using the main authenticated transp
   const id='30000000-0000-0000-0000-000000000001'
   request.mockResolvedValue({data:{items:[],total:0,page:1,pages:1,page_size:20}})
   await supplierResourceClient(id).accounts()
-  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({url:`/api/supplier/admin/v1/suppliers/${id}/accounts?page=1&page_size=20`,baseURL:'/'}))
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({url:`/api/supplier/admin/v1/suppliers/${id}/accounts?page=1&page_size=20&include_metrics=1`,baseURL:'/'}))
   await expect(supplierResourceClient(id).portalMe()).rejects.toMatchObject({status:403})
+})
+it('pins monitoring to the same supplier and cannot redirect its scope',async()=>{
+  const id='30000000-0000-0000-0000-000000000001'
+  const metric={value:'0',known:0,total:0,status:'ok'}
+  request.mockResolvedValue({data:{observed_at:new Date().toISOString(),quota_fetched_at:null,rpm:metric,tpm:metric,uncached_tpm:metric,concurrency:metric,high_quota:metric,windows:{five_hour:{maximum:null,known:0,total:0},seven_day:{maximum:null,known:0,total:0},fable:{maximum:null,known:0,total:0}},account_quotas:{}}})
+  const client=supplierResourceClient(id)
+  expect((await client.overview()).rpm.value).toBe('0')
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({method:'GET',baseURL:'/',url:`/api/supplier/admin/v1/suppliers/${id}/accounts/overview`}))
+  await expect(client.overview('foreign')).rejects.toMatchObject({status:403})
 })
 it('keeps exact decimal settlement input and its retry key',async()=>{
   const input={amount_usd:'0.01',payment_method:'usd_transfer',reference:'fixture',remark:''}

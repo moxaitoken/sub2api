@@ -89,7 +89,7 @@ export function supplierResourceClient(id: string): SupplierClient {
   if (!/^[a-f0-9-]{36}$/i.test(id)) throw new ApiError(404,'RESOURCE_NOT_FOUND')
   const prefix = `/suppliers/${encodeURIComponent(id)}`
   return new SupplierClient(() => {}, undefined, 'supplier', async <T>(path: string, options: RequestOptions) => {
-    if (!/^\/(accounts(?:\?|$)|usage\?|proxies(?:\/|$)|onboarding\/options$|oauth\/sessions(?:\/|$)|operations\/)/.test(path)) throw new ApiError(403,'ACCESS_DENIED')
+    if (!/^\/(accounts(?:\/overview$|\?|$)|usage\?|proxies(?:\/|$)|onboarding\/options$|oauth\/sessions(?:\/|$)|operations\/)/.test(path)) throw new ApiError(403,'ACCESS_DENIED')
     try { return await request<T>(options.method || 'GET', prefix + path, options.body, options.idempotencyKey, options.version) }
     catch (cause) { const e = cause as {status?:number;reason?:string;request_id?:string}; throw new ApiError(e.status || 0,e.reason || 'REQUEST_FAILED',e.request_id) }
   })

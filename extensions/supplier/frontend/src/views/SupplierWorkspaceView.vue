@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { PoolOverview, AccountQuota } from '../api/overview'
 import { useSupplierI18n } from '../i18n/useSupplierI18n'
 import type { SupplierAccount } from '../api/types'
 import PortalIcon from '../components/PortalIcon.vue'
 import PortalDialog from '../components/PortalDialog.vue'
 import UsageStatsView from './UsageStatsView.vue'
 import type { SupplierClient } from '../api/client'
-const props = defineProps<{ client?: SupplierClient; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; updatedAt: string; failed: boolean }>()
+const props = defineProps<{ client?: SupplierClient; overviewSupplier?: string; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; updatedAt: string; failed: boolean }>()
 const emit = defineEmits<{ refresh: [page?: number]; add: [] }>()
 const { t, locale } = useSupplierI18n()
 const search = ref(''), state = ref(''), supply = ref(''), overview = ref(true), columnsOpen = ref(false)
@@ -17,7 +18,40 @@ const filtered = computed(() => props.accounts.filter(account =>
   (!search.value.trim() || `${account.id} ${account.name}`.toLowerCase().includes(search.value.trim().toLowerCase())) &&
   (!state.value || account.admission_state === state.value) && (!supply.value || account.desired_state === supply.value)))
 const filtersActive = computed(() => Boolean(search.value || state.value || supply.value))
-const displayTime = computed(() => props.updatedAt ? new Date(props.updatedAt).toLocaleTimeString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
+const pool = ref<PoolOverview | null>(null), poolBusy = ref(false), poolFailed = ref(false)
+let poolGeneration = 0, poolTimer: ReturnType<typeof setTimeout> | undefined
+const displayTime = computed(() => pool.value ? new Date(pool.value.observed_at).toLocaleTimeString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
+async function loadPool() {
+  clearTimeout(poolTimer)
+  if (!props.client || props.tab !== 'accounts' || document.visibilityState === 'hidden') return
+  const generation = ++poolGeneration; poolBusy.value = true
+  try { const value = await props.client.overview(props.overviewSupplier); if (generation === poolGeneration) { pool.value = value; poolFailed.value = false } }
+  catch { if (generation === poolGeneration) { pool.value = null; poolFailed.value = true } }
+  finally { if (generation === poolGeneration) { poolBusy.value = false; poolTimer = setTimeout(loadPool,5000) } }
+}
+function poolVisibility() { ++poolGeneration; clearTimeout(poolTimer); if (document.visibilityState !== 'hidden') void loadPool() }
+watch(() => [props.client,props.tab,props.overviewSupplier], () => { ++poolGeneration; clearTimeout(poolTimer); pool.value = null; poolFailed.value = false; void loadPool() },{immediate:true})
+onMounted(() => document.addEventListener('visibilitychange',poolVisibility))
+onBeforeUnmount(() => { ++poolGeneration; clearTimeout(poolTimer); document.removeEventListener('visibilitychange',poolVisibility) })
+const metricKeys = ['rpm','tpm','uncached_tpm','concurrency','high_quota'] as const
+const metricNames = ['rpm','tpm','uncachedTpm','concurrency','highQuota']
+function metricValue(key: typeof metricKeys[number]) { const value = pool.value?.[key].value; return value == null ? '—' : BigInt(value).toLocaleString(locale.value) }
+function metricNote(key: typeof metricKeys[number]) {
+  const m = pool.value?.[key]
+  if (poolBusy.value && !m) return t('app.loading')
+  if (poolFailed.value || !m || m.status === 'unavailable') return t('workspace.monitorUnavailable')
+  if (m.status === 'partial') return t('workspace.monitorPartial',{known:m.known,total:m.total})
+  return t(key === 'rpm' ? 'workspace.currentMinute' : key === 'tpm' || key === 'uncached_tpm' ? 'workspace.recordedMinute' : key === 'high_quota' ? 'workspace.quotaThreshold' : 'workspace.liveSample')
+}
+const windowKeys = ['five_hour','seven_day','fable'] as const
+const windowNames = ['fiveHour','sevenDay','fable']
+function rowQuota(id: string,key: 'five_hour' | 'seven_day' | 'seven_day_fable') {
+  const q: AccountQuota | undefined = pool.value?.account_quotas[id], w = q?.[key]
+  if (!q?.updated_at || !w || w.utilization === null || !pool.value) return null
+  const age = Date.parse(pool.value.observed_at) - Date.parse(q.updated_at)
+  return age >= -5000 && age <= 300000 && (!w.resets_at || Date.parse(w.resets_at) > Date.parse(pool.value.observed_at)) ? w.utilization : null
+}
+function refreshAccounts() { emit('refresh',props.page); void loadPool() }
 function reset() { search.value = ''; state.value = ''; supply.value = '' }
 function observed(value: string | null) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US') : '—' }
 function cost(value: string | null | undefined) {
@@ -41,7 +75,7 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
     <div class="workspace-heading">
       <div><div v-if="tab === 'usage'" class="eyebrow">SUPPLIER WORKSPACE</div><h1>{{ t(tab === 'accounts' ? 'accounts.title' : `portal.${tab}`) }}</h1><p>{{ t(`workspace.${tab}Description`) }}</p></div>
       <div class="heading-actions">
-        <button v-if="tab === 'accounts'" :disabled="loading" @click="emit('refresh', page)"><PortalIcon name="refresh" :size="15" />{{ t('app.refresh') }}</button>
+        <button v-if="tab === 'accounts'" :disabled="loading" @click="refreshAccounts"><PortalIcon name="refresh" :size="15" />{{ t('app.refresh') }}</button>
         <button v-if="tab === 'accounts'" class="primary" :disabled="loading" @click="emit('add')"><PortalIcon name="plus" :size="15" />{{ t(tab === 'accounts' ? 'workspace.addAccount' : 'workspace.addProxy') }}</button>
       </div>
     </div>
@@ -51,9 +85,9 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
         <div class="overview-heading"><b>{{ t('workspace.overview') }}</b><button class="text-button icon-button" :aria-label="t('workspace.scope')" @click="scopeOpen = true"><PortalIcon name="info" :size="14" /></button><span class="overview-updated">{{ t('workspace.updated') }} {{ displayTime }}</span><button class="text-button" :aria-expanded="overview" @click="overview = !overview">{{ t(overview ? 'workspace.collapse' : 'workspace.expand') }} <span aria-hidden="true">⌄</span></button></div>
         <template v-if="overview">
           <div class="overview-metrics"><div class="account-count"><small>{{ t('workspace.totalAccounts') }}</small><strong>{{ total === null || failed ? '—' : total }}</strong><small>{{ t('workspace.ownScope') }}</small></div>
-            <div v-for="metric in ['rpm','tpm','uncachedTpm','concurrency','highQuota']" :key="metric" class="overview-metric"><small>{{ t(`workspace.${metric}`) }}</small><strong>—</strong><small>{{ t('workspace.awaitingMetrics') }}</small></div>
+            <div v-for="(metric,i) in metricKeys" :key="metric" class="overview-metric"><small>{{ t(`workspace.${metricNames[i]}`) }}</small><strong>{{ metricValue(metric) }}</strong><small>{{ metricNote(metric) }}</small></div>
           </div>
-          <div class="quota-windows"><div v-for="window in ['fiveHour','sevenDay','fable']" :key="window"><b>{{ t(`workspace.${window}`) }}</b><span class="muted"> · {{ t('workspace.quotaWindow') }}</span><div class="quota-track"></div><small>{{ t('workspace.awaitingQuota') }}</small></div></div>
+          <div class="quota-windows"><div v-for="(window,i) in windowKeys" :key="window"><b>{{ t(`workspace.${windowNames[i]}`) }}</b><span class="muted"> · {{ t('workspace.quotaMaximum') }}</span><div class="quota-track"><span v-if="pool?.windows[window].maximum != null" :style="{width: `${Math.min(100,pool.windows[window].maximum!)}%`}"></span></div><small>{{ pool?.windows[window].maximum == null ? t('workspace.quotaUnavailable') : `${pool.windows[window].maximum}% · ${t('workspace.monitorPartial',{known:pool.windows[window].known,total:pool.windows[window].total})}` }}</small><small v-if="pool?.windows[window].updated_at">{{ t('workspace.quotaSnapshotAt') }} {{ observed(pool.windows[window].updated_at!) }}<template v-if="pool.windows[window].resets_at"> · {{ t('workspace.quotaResetsAt') }} {{ observed(pool.windows[window].resets_at!) }}</template></small></div></div>
         </template>
       </section>
       <section class="account-list" :aria-label="t('accounts.title')" :aria-busy="loading">
@@ -70,7 +104,7 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
             <td v-if="visible.includes('name')"><button class="account-name text-button" @click="details = account">{{ account.name }}</button><small class="account-id">#{{ account.id }}</small></td>
             <td v-if="visible.includes('state')"><span class="status-badge" :class="account.admission_state === 'approved' ? 'green' : ['blocked','rejected','needs_attention'].includes(account.admission_state) ? 'red' : 'gray'">{{ t(`accounts.states.${account.admission_state}`) }}</span><small v-if="syncWarning(account)" class="metrics-partial" role="status">{{ syncWarning(account) }}</small></td>
             <td v-if="visible.includes('supply')"><span class="supply-dot" :class="{ running: account.desired_state === 'running' }"></span>{{ t(`accounts.supplyStates.${account.desired_state}`) }}</td>
-            <td v-if="visible.includes('quota')"><div class="row-quota"><span>5h <i></i> —</span><span>7d <i></i> —</span><span>Fable <i></i> —</span></div></td>
+            <td v-if="visible.includes('quota')"><div class="row-quota"><span v-for="(window,i) in ['five_hour','seven_day','seven_day_fable'] as const" :key="window">{{ ['5h','7d','Fable'][i] }} · {{ rowQuota(account.id,window) === null ? '—' : `${rowQuota(account.id,window)}%` }}</span></div></td>
             <td v-if="visible.includes('concurrency')" :title="t('workspace.concurrencyLimitHint')">{{ account.metrics?.configuration?.concurrency_limit ?? '—' }}</td>
             <td v-if="visible.includes('weight')" :title="t('workspace.priorityHint')">{{ account.metrics?.configuration?.priority ?? '—' }}</td>
             <td v-if="visible.includes('today')" :title="t('workspace.costHint')">{{ cost(consumption(account, 'today')) }}<small v-if="partial(account, 'today')" class="metrics-partial">{{ t('workspace.syncingCosts') }}</small></td>
@@ -83,6 +117,7 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
         <div class="workspace-pagination"><span>{{ t('workspace.records', { count: total === null || failed ? '—' : total }) }}</span><span v-if="filtersActive">{{ t('workspace.pageMatches', { count: filtered.length }) }}</span><span class="push">{{ t('workspace.pageOf', { page, pages: Math.max(1,pages) }) }}</span><button :disabled="loading || failed || page <= 1" :aria-label="t('accounts.previous')" @click="emit('refresh', page - 1)">‹</button><button :disabled="loading || failed || page >= pages" :aria-label="t('accounts.next')" @click="emit('refresh', page + 1)">›</button></div>
       </section>
       <p class="workspace-caption"><PortalIcon name="shield" :size="13" />{{ t('workspace.accountReadBoundary') }}</p>
+      <p class="workspace-caption">{{ t('workspace.monitorScope') }}<span v-if="pool?.quota_fetched_at"> {{ t('workspace.quotaFetchedAt') }} {{ observed(pool.quota_fetched_at) }}</span></p>
     </template>
 
     <template v-else-if="tab === 'proxies'">
@@ -102,4 +137,5 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
 </template>
 <style scoped>
 .metrics-partial { display: block; color: #9a6700; font-size: 11px; }
+.quota-track > span { display:block; height:100%; background:#1295a2; border-radius:inherit; }
 </style>

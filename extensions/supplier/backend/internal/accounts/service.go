@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
@@ -19,16 +20,19 @@ import (
 )
 
 type Service struct {
-	Store          ports.AccountStore
-	Upstream       ports.AccountUpstream
-	Vault          *auth.Vault
-	KeyID          string
-	IdentityKey    []byte
-	IdentityKeyID  string
-	QuarantineID   int64
-	ApprovedGroups []int64
-	GroupPolicies  ports.GroupAccessStore
-	ProxyCapacity  int64
+	overviewMu      sync.Mutex
+	overviewEntries map[string]*overviewEntry
+	overviewGate    chan struct{}
+	Store           ports.AccountStore
+	Upstream        ports.AccountUpstream
+	Vault           *auth.Vault
+	KeyID           string
+	IdentityKey     []byte
+	IdentityKeyID   string
+	QuarantineID    int64
+	ApprovedGroups  []int64
+	GroupPolicies   ports.GroupAccessStore
+	ProxyCapacity   int64
 }
 
 var claudeIdentityPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

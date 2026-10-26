@@ -1,4 +1,5 @@
 import { checkedUsage } from './usage'
+import { checkedOverview, type PoolOverview } from './overview'
 import type { UsagePeriod, UsageReport } from './types'
 import type { Identity, LoginInput, LoginResult, SupplierAccount, Page, Authorization, AccountOperation, PortalIdentity, ManagedSupplier, OwnProxy, ProxyInput, OnboardingOptions, AccountSettings } from './types'
 
@@ -138,6 +139,13 @@ export class SupplierClient {
   async accounts(page = 1, review = false): Promise<Page<SupplierAccount>> {
     const data = await this.request<Page<SupplierAccount>>(`${review ? '/review' : ''}/accounts?page=${page}&page_size=20${review ? '' : '&include_metrics=1'}`)
     return this.checkedAccounts(data)
+  }
+
+  async overview(supplier?: string): Promise<PoolOverview> {
+    if ((this.portal === 'admin') !== Boolean(supplier)) throw new ApiError(403,'ACCESS_DENIED')
+    const prefix = supplier ? `/suppliers/${encodeURIComponent(supplier)}` : ''
+    const value = await this.request<unknown>(prefix + '/accounts/overview')
+    try { return checkedOverview(value) } catch { throw new ApiError(200,'INVALID_RESPONSE') }
   }
 
   private checkedAccounts(data: Page<SupplierAccount>): Page<SupplierAccount> {

@@ -10,7 +10,14 @@ const admin = {principal:{kind:'admin',id:'42',email:'admin@example.invalid'},cs
 const row = {...supplier,login_account:'vendor_01',unsettled_usd:'0.00',settled_usd:'0.00',total_consumption_usd:'0.00'}
 const ok = (data:unknown) => new Response(JSON.stringify({code:0,data}),{status:200})
 const page = (items:unknown[]) => ({items,total:items.length,page:1,page_size:20,pages:items.length ? 1 : 0})
-const mountApp = () => mount(App,{global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
+const mountApp = () => {
+  // These identity/navigation fixtures do not model monitoring; dedicated
+  // overview tests exercise its requests, timer and response validation.
+  const transport = globalThis.fetch
+  vi.stubGlobal('fetch', (...args: Parameters<typeof fetch>) => String(args[0]).endsWith('/accounts/overview')
+    ? Promise.resolve(new Response(JSON.stringify({code:503}),{status:503})) : transport(...args))
+  return mount(App,{global:{plugins:[createI18n({legacy:false,locale:'en',messages:{zh,en}})]}})
+}
 afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();window.history.replaceState(null,'','/')})
 describe('R2 portal boundaries',()=>{
  it('uses Goccmax consistently in supplier navigation and footer',async()=>{

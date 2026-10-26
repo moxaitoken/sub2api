@@ -325,7 +325,7 @@ usage_records保存脱敏读取模型，sync_cursors保存逐账号进度。主�
 - 今天/近7天/近30天含今天，另支持全部历史，上海自然日；全部/单账号可筛，归档历史保留，无自定义日期/导出。四卡为官方价消耗、全部请求尝试、input+output Token、cache_write+cache_read；卡/日/账号总计同过滤相等。账号明细消耗DESC、id ASC，分页total基于完整集合。
 - 缓存命中率=read/(非缓存input+write+read)；成功率=成功attempt/全部attempt；分母0为—；延迟只统计有效结束，首字仅实际有首字的流式样本。主站input是否含缓存先验证再映射。
 - 账号池overview全自家，不受列表过滤；总数/累计消耗含归档，可用/冷却/停用/高负载排除归档，异常包含归档，各维可能重叠。faults来自基础筛选再点击故障过滤列表，故障分类按PRD安全码，不回显错误原文。
-- RPM滚动60秒尝试、TPM含input/output/缓存、noncache_TPM仅input/output；在途/有效容量来自真实调度采样，不是绑定账号数。缺源/过期显示unknown，不能固定0或示例数。
+- RPM已按2026-10-24产品确认改为主站现有自然分钟计数，不再要求滚动60秒全部尝试。TPM按主站最近60秒usage记录时间汇总已落库input/output/缓存，noncache_TPM仅input/output；在途Token不估算，实时并发来自主站实际槽位。全量归属、覆盖数、缓存与失效边界见 [账号池指标](account-metrics.md)。缺源/过期显示unknown，不能固定0或示例数。
 - 配额保留5h/7d/Fable，显示阈值<90/90–<99/>=99；模型窗口满不代表整号不可调度。Fable映射、reset_at必须有真实来源，不猜模型或恢复时间。
 - 账号详情用量all/today影响该区，固定5h/7d/30d快照独立；模型分布和匿名API来源不泄客户/Key。全平台仅独立白名单聚合，不能下钻/任意过滤推断他人资源。
 
