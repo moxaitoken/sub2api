@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sub2API live release manifest",
+  "type": "object",
+  "required": ["schema_version", "release_id", "environment", "target", "source", "components", "deployment", "inputs", "status"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "release_id": { "type": "string", "pattern": "^live-[A-Za-z0-9._-]+$" },
+    "environment": { "const": "live" },
+    "target": {
+      "type": "object",
+      "required": ["host", "project", "remote_root"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "project": { "const": "sub2api" },
+        "remote_root": { "const": "/opt/sub2api" }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["root", "commit", "requested_commit", "branch", "dirty_paths", "unexpected_dirty_paths"],
+      "properties": {
+        "root": { "type": "string" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "requested_commit": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string" },
+        "dirty_paths": { "type": "array", "items": { "type": "string" } },
+        "unexpected_dirty_paths": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "image_variable", "dockerfile", "compose_files", "health_url"],
+        "properties": {
+          "name": { "enum": ["main", "supplier"] },
+          "image_variable": { "type": "string" },
+          "dockerfile": { "type": "string" },
+          "compose_files": { "type": "array", "items": { "type": "string" } },
+          "health_url": { "type": "string", "format": "uri" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "working_copy_overlays": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" } },
+    "deployment": { "type": "object" },
+    "inputs": { "type": "object" },
+    "status": { "enum": ["planned", "staged", "migrated", "activated", "verified", "rolled_back", "failed"] }
+  },
+  "additionalProperties": false
+}

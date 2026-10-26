@@ -161,3 +161,6 @@ issues/
 .vite/
 # 本地闭源插件开发目录及构建产物不进入 Sub2API 仓库
 /plugins/
+
+# live 发布计划脚本的 Python 字节码缓存
+ops/deployment/live/__pycache__/

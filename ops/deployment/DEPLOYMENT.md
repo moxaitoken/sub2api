@@ -114,3 +114,58 @@ Caddy 启用前的环境与配置备份位于 ECS `/opt/sub2api/backups/ingress-
 完整门户测试/类型/构建通过；3个同输入复制fixture BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，源hash一致、补丁重建一致。两库dump已在无网络临时PG实际恢复。公网HTML/资源与镜像字节一致、健康200、未登录401、www308通过；未执行浏览器渲染验收。
 
 备份和回退：`/opt/sub2api/releases/copy-20261023-210751/before`、`/opt/sub2api/releases/copy-20261023-210751/ROLLBACK.sh`。本次旧供应商镜像为兼容011的group版本，脚本可仅回退供应商镜像env和容器；带一个参数还原env副本已实测，未为验证执行生产回退。禁止使用更早的pre011供应商程序。
+
+## mapping-20261024-000000
+
+用户授权将当前提交 6ae3edbcb4d605ef221d7091f0876a595bb53e69 部署到现有 ECS。主站镜像 sub2api-local:mapping-20261024-000000 先切换，供应商镜像 sub2api-supplier:mapping-20261024-000000 后切换；Caddy、域名、密钥、供应商环境文件保持不变。供应商数据库从011前进迁移至012，增加供应商分组名映射、多目标OAuth分组绑定及历史回填；旧的 group_access(1) enabled/version1 状态保留，不新增启用分组。
+
+发布前两库及应用数据备份位于 /opt/sub2api/releases/mapping-20261024-000000/before，在隔离 PostgreSQL 实际恢复校验。主站296迁移、4用户、2账号不变；供应商迁移数12、012列与运行角色权限校验通过。主站与供应商容器健康、重启数0、端口仅回环；gomoai.ai/goccmax.com健康和HTML/静态资源200，管理员登录/能力接口200，供应商未登录接口401，分组映射读取200。
+
+主站构建、聚焦后端/前端测试、供应商unit/vet/build和门户104项测试通过。供应商全量Postgres集成套件退出1：两条断言仍写死迁移数11，另有用量回填重试时序失败；该证据已记录，未静默跳过。真实Claude授权、调用和非零消费仍待验收。
+
+回退边界：/opt/sub2api/releases/mapping-20261024-000000/ROLLBACK.sh 仅允许还原指定env副本；无参数在012已应用后退出3并拒绝启动旧供应商二进制。生产数据库不自动回退，必须使用012兼容修复镜像或另行授权的匹配备份恢复。角色记录位于发布目录 role-records/。
+
+
+## settings-20261024-152100
+
+用户授权发布固定提交 1d02333df1913dca62152adad0a643752c090d4d。主站 sub2api-local:settings-20261024-152100 和供应商 sub2api-supplier:settings-20261024-152100 已更新。013仅新增OAuth account_settings参数快照，旧未完成授权保留旧默认；已有账号和分组未批量修改。供应商全量后端248通过事件/无跳过、门户110项测试/类型/构建、主站18项聚焦测试及嵌入构建通过。
+
+两库及卷备份 /opt/sub2api/releases/settings-20261024-152100/before 已实际隔离恢复；模块备份在隔离PG演练012→013通过，分组及会话行数保持。生产013迁移、默认/列权限检查通过；两容器健康/重启0/仅回环端口，公网HTTPS健康/HTML/初始资源200、管理员登录及读取200、未认证401。Caddy/密钥/供应商env不变。真实Claude调用和非零消费未测试。
+
+恢复边界：/opt/sub2api/releases/settings-20261024-152100/ROLLBACK.sh 还原指定env副本已实测exit0，无参数拒绝exit3，不自动回退数据库或启动pre013程序；采用013兼容前向修复或另行授权的匹配备份维护恢复。源码同输入BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，补丁精确重建、恢复hash一致。角色文件归档于role-records。
+
+
+## metrics-20261024-162900
+
+用户授权发布固定提交 c50627547d2bf4aefc24b417de2e219eb66c479d。主站 sub2api-local:metrics-20261024-162900 和供应商 sub2api-supplier:metrics-20261024-162900 已更新。账号池以可选include_metrics=1只读投影并发上限/调度优先级及已同步今日/累计官方消耗；保留精确金额字符串、null不可用及partial提示，不冒充实时指标。未请求参数保持旧响应。无迁移、依赖或权限变更，供应商schema013和主站296迁移不变。
+
+两库及卷备份 /opt/sub2api/releases/metrics-20261024-162900/before 已实际隔离恢复。供应商后端完整检查和前端测试/类型/构建、主站嵌入构建通过。主站原测试1项仍期待旧URL，保留失败，仅在仓库外验证副本补include_metrics=1预期后，聚焦及管理员供应商测试通过；未修改运行时代码或声称原套件全通过。公网HTTPS健康/页面/初始资源200、管理员登录和指标读取200、未认证401、兼容旧读取不带metrics。已有账号/用户/分组保持、Caddy和供应商env不变。真实Claude模型和非零消费验收未执行。
+
+源码同输入BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，补丁精确重建、恢复hash一致。/opt/sub2api/releases/metrics-20261024-162900/ROLLBACK.sh 可回退两镜像到本次前schema013兼容settings版本；仅语法和env副本恢复已实测，未为验证回退生产，不回退数据库。角色记录位于role-records。
+
+
+## sync-20261024-174700
+
+用户授权发布 8e90acff70e55a362e72d0bbf4de048fa345f909，两镜像 sub2api-local:sync-20261024-174700 / sub2api-supplier:sync-20261024-174700。刷新include_metrics=1时在同次主站读取中同步状态：active→approved，schedulable→running/paused；失败/pending有标记，归属/版本/进行中操作保护，变化事务写实际阅读者审计；不更新主站状态/分组/账务，不重放OAuth。无迁移/依赖/权限调整，供应商013、主站296迁移不变。
+
+两库及卷备份 /opt/sub2api/releases/sync-20261024-174700/before 已实际隔离恢复；供应商完整后端/门户测试、类型与两套嵌入构建通过。主站一条原URL断言仍未补include_metrics=1，原失败保留；仅仓库外验证副本更新预期后相关测试通过，运行源码未改。线上验证状态同步DTO与实际落库/主站状态一致，重复刷新不增加版本/审计，历史操作不变，主站账号与分组不变；公网HTTPS健康/页面/资源200、管理员读取200、未认证401。真实模型调用未执行。
+
+源码同输入BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，补丁精确重建、恢复hash一致。/opt/sub2api/releases/sync-20261024-174700/ROLLBACK.sh 支持回退到此前013兼容metrics镜像，语法/env副本恢复已测，未为测试回退生产；代码回退不撤销已镜像的主站观察值/审计，不回退数据库。四角色及补充记录保存在role-records。
+
+
+## pool-20261026-100500
+
+用户授权发布 9e1755a240456b142c1f64152d8ea1d9f47634a8，两镜像 sub2api-local:pool-20261026-100500 / sub2api-supplier:pool-20261026-100500。刷新include_metrics=1时在同次主站读取中同步状态：active→approved，schedulable→running/paused；失败/pending有标记，归属/版本/进行中操作保护，变化事务写实际阅读者审计；不更新主站状态/分组/账务，不重放OAuth。无迁移/依赖/权限调整，供应商013、主站296迁移不变。
+
+两库及卷备份 /opt/sub2api/releases/pool-release-20261026-100500/before 已实际隔离恢复；供应商完整后端/门户测试、类型与两套嵌入构建通过。主站一条原URL断言仍未补include_metrics=1，原失败保留；仅仓库外验证副本更新预期后相关测试通过，运行源码未改。线上验证状态同步DTO与实际落库/主站状态一致，重复刷新不增加版本/审计，历史操作不变，主站账号与分组不变；公网HTTPS健康/页面/资源200、管理员读取200、未认证401。真实模型调用未执行。
+
+源码同输入BASELINE失败exit1→MODIFIED通过exit0→ROLLBACK恢复失败exit1，补丁精确重建、恢复hash一致。/opt/sub2api/releases/pool-release-20261026-100500/ROLLBACK.sh 支持回退到此前013兼容metrics镜像，语法/env副本恢复已测，未为测试回退生产；代码回退不撤销已镜像的主站观察值/审计，不回退数据库。四角色及补充记录保存在role-records。
+
+
+## live-20261026-100501-1ad1889b5159
+
+使用统一 live-release.py --include-release-tooling --execute 发布固定提交 `1ad1889b5159bcb3075e7c96589fc0f456834b19` 和hash记录的发布工具/Dockerfile补丁；未commit/push。主站 `sub2api-main:live-20261026-100501-1ad1889b5159`，供应商 `sub2api-supplier:live-20261026-100501-1ad1889b5159`。供应商新登录固定7天，不因活动续期；管理员与OAuth期限独立，不重写既有会话到期值。
+
+供应商后端276通过事件、0跳过，门户121测试及类型/构建通过，主站i18n/类型/嵌入构建通过；未声称重跑主站完整单元套件。两库dump在无网络临时PG实际恢复，schema主库296/供应商13不变；Caddy、供应商环境配置hash保持。两服务健康、0重启、仅回环端口；公网HTTPS健康/页面200、管理员登录及4个供应商概览200、未认证401、初始静态资源200。未触发真实模型/OAuth/付款。
+
+服务器归档 `/opt/sub2api/releases/live-20261026-100501-1ad1889b5159`，备份 `before/`，回退入口 `ROLLBACK.sh`。可恢复两镜像/production.env，schema漂移时拒绝自动镜像回退；无数据库降级。环境副本实际恢复hash一致，未为测试回退生产。四角色及执行器同输入回归记录：`C:/Users/tirol/.codex/artifacts/sub2api-deploy/20261026-live-script`；旧执行器失败→修正通过→副本回滚恢复旧行为。
