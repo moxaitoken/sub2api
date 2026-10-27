@@ -7,7 +7,7 @@ import PortalIcon from '../components/PortalIcon.vue'
 import PortalDialog from '../components/PortalDialog.vue'
 import UsageStatsView from './UsageStatsView.vue'
 import type { SupplierClient } from '../api/client'
-const props = defineProps<{ client?: SupplierClient; overviewSupplier?: string; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; updatedAt: string; failed: boolean }>()
+const props = defineProps<{ client?: SupplierClient; overviewSupplier?: string; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; failed: boolean; allowAddAccount?: boolean; updatedAt: string }>()
 const emit = defineEmits<{ refresh: [page?: number]; add: [] }>()
 const { t, locale } = useSupplierI18n()
 const search = ref(''), state = ref(''), supply = ref(''), overview = ref(true), columnsOpen = ref(false)
@@ -76,7 +76,7 @@ watch(() => props.tab, () => { details.value = null; columnsOpen.value = false; 
       <div><div v-if="tab === 'usage'" class="eyebrow">SUPPLIER WORKSPACE</div><h1>{{ t(tab === 'accounts' ? 'accounts.title' : `portal.${tab}`) }}</h1><p>{{ t(`workspace.${tab}Description`) }}</p></div>
       <div class="heading-actions">
         <button v-if="tab === 'accounts'" :disabled="loading" @click="refreshAccounts"><PortalIcon name="refresh" :size="15" />{{ t('app.refresh') }}</button>
-        <button v-if="tab === 'accounts'" class="primary" :disabled="loading" @click="emit('add')"><PortalIcon name="plus" :size="15" />{{ t(tab === 'accounts' ? 'workspace.addAccount' : 'workspace.addProxy') }}</button>
+        <button v-if="tab === 'accounts' && props.allowAddAccount !== false" class="primary" :disabled="loading" @click="emit('add')"><PortalIcon name="plus" :size="15" />{{ t('workspace.addAccount') }}</button>
       </div>
     </div>
 

@@ -6,11 +6,9 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import { supplierAdminAPI, supplierResourceClient, type ManagedSupplier } from '@/api/admin/suppliers'
 import SupplierWorkspaceView from '../../../../../extensions/supplier/frontend/src/views/SupplierWorkspaceView.vue'
 import OwnProxiesView from '../../../../../extensions/supplier/frontend/src/views/OwnProxiesView.vue'
-import AccountOnboardingView from '../../../../../extensions/supplier/frontend/src/views/AccountOnboardingView.vue'
-import PortalDialog from '../../../../../extensions/supplier/frontend/src/components/PortalDialog.vue'
 import type { SupplierAccount } from '../../../../../extensions/supplier/frontend/src/api/types'
 const route = useRoute(), { t } = useI18n()
-const supplier = ref<ManagedSupplier | null>(null), error = ref(''), loading = ref(false), adding = ref(false)
+const supplier = ref<ManagedSupplier | null>(null), error = ref(''), loading = ref(false)
 const accounts = ref<SupplierAccount[]>([]), total = ref<number | null>(null), page = ref(1), pages = ref(1), updatedAt = ref('')
 const id = computed(() => String(route.params.id || ''))
 const tab = computed(() => String(route.params.tab || 'accounts'))
@@ -26,7 +24,7 @@ async function load(next = 1) {
   } catch { if (current === generation) { supplier.value = null; error.value = t('supplierAdmin.failed') } }
   finally { if (current === generation) loading.value = false }
 }
-watch(id, () => { supplier.value = null; adding.value = false; void load() }, { immediate: true })
+watch(id, () => { supplier.value = null; void load() }, { immediate: true })
 onUnmounted(() => generation++)
 </script>
 
@@ -43,8 +41,7 @@ onUnmounted(() => generation++)
       </nav>
       <div :key="id" class="supplier-business">
         <OwnProxiesView v-if="tab === 'proxies'" :client="client" />
-        <SupplierWorkspaceView v-else :key="tab" :client="client" :tab="tab" :accounts="accounts" :total="total" :page="page" :pages="pages" :loading="loading" :updated-at="updatedAt" :failed="!!error" @refresh="load" @add="adding = true" />
-        <PortalDialog v-if="adding" :title="t('supplierPortal.workspace.addAccount')" @close="adding = false"><AccountOnboardingView :client="client" @close="adding = false" @created="adding = false; load()" /></PortalDialog>
+        <SupplierWorkspaceView v-else :key="tab" :client="client" :tab="tab" :accounts="accounts" :total="total" :page="page" :pages="pages" :loading="loading" :updated-at="updatedAt" :failed="!!error" :allow-add-account="false" @refresh="load" />
       </div>
     </template>
   </AppLayout>

@@ -11,6 +11,12 @@ const second: SupplierAccount = { ...first, id: 'fixture-2', name: 'Beta Claude'
 const view = (props = {}) => mount(SupplierWorkspaceView, { props: { tab: 'accounts', accounts: [first, second], total: 42, page: 1, pages: 3, loading: false, failed: false, updatedAt: '', ...props }, global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { zh, en } })] } })
 
 describe('supplier prototype business pages', () => {
+  it('hides account onboarding when rendered for the administrator portal', () => {
+    const w = view({ allowAddAccount: false })
+    expect(w.findAll('button').some(button => button.text() === en.workspace.addAccount)).toBe(false)
+    w.unmount()
+  })
+
   it('renders refreshed upstream states and marks failures as last known, in rows and details', async () => {
     const w = view({accounts:[{...first,admission_state:'needs_attention',desired_state:'paused',state_sync:'failed'}]})
     expect(w.get('tbody').text()).toContain(en.workspace.stateSyncFailed)
