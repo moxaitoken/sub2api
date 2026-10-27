@@ -11,6 +11,16 @@ const second: SupplierAccount = { ...first, id: 'fixture-2', name: 'Beta Claude'
 const view = (props = {}) => mount(SupplierWorkspaceView, { props: { tab: 'accounts', accounts: [first, second], total: 42, page: 1, pages: 3, loading: false, failed: false, updatedAt: '', ...props }, global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { zh, en } })] } })
 
 describe('supplier prototype business pages', () => {
+  it.each([{}, { allowAddAccount: true }])('keeps supplier account onboarding available with props %j', async props => {
+    const w = view(props)
+    const add = w.findAll('button').find(button => button.text() === en.workspace.addAccount)!
+    expect(add).toBeDefined()
+    expect(add.attributes('disabled')).toBeUndefined()
+    await add.trigger('click')
+    expect(w.emitted('add')).toEqual([[]])
+    w.unmount()
+  })
+
   it('hides account onboarding when rendered for the administrator portal', () => {
     const w = view({ allowAddAccount: false })
     expect(w.findAll('button').some(button => button.text() === en.workspace.addAccount)).toBe(false)

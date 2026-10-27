@@ -12,6 +12,7 @@ it('pins resources to the target supplier and removes old content while another 
   accounts.mockResolvedValue({items:[],total:0,page:1,pages:1});resource.mockImplementation(()=>({accounts}))
   const w=mount(SupplierResourceView,{global:{stubs:{AppLayout:{template:'<main><slot/></main>'},RouterLink:{props:['to'],template:'<a :href="to"><slot/></a>'},SupplierWorkspaceView:true,OwnProxiesView:true,PortalDialog:true}}});await flushPromises()
   expect(resource).toHaveBeenLastCalledWith(params.id);expect(w.text()).toContain('vendor_a')
+  expect(w.findComponent({name:'SupplierWorkspaceView'}).props('allowAddAccount')).toBe(false)
   expect(w.findAll('a').map(a=>a.attributes('href'))).toContain(`/admin/suppliers/${params.id}/usage`)
   let resolve!: (data:unknown)=>void
   detail.mockReturnValue(new Promise(r=>{resolve=r}));params.id='30000000-0000-0000-0000-000000000002';await flushPromises()

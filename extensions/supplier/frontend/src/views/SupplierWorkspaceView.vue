@@ -7,7 +7,7 @@ import PortalIcon from '../components/PortalIcon.vue'
 import PortalDialog from '../components/PortalDialog.vue'
 import UsageStatsView from './UsageStatsView.vue'
 import type { SupplierClient } from '../api/client'
-const props = defineProps<{ client?: SupplierClient; overviewSupplier?: string; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; failed: boolean; allowAddAccount?: boolean; updatedAt: string }>()
+const props = withDefaults(defineProps<{ client?: SupplierClient; overviewSupplier?: string; tab: string; accounts: SupplierAccount[]; total: number | null; page: number; pages: number; loading: boolean; failed: boolean; allowAddAccount?: boolean; updatedAt: string }>(), { allowAddAccount: true })
 const emit = defineEmits<{ refresh: [page?: number]; add: [] }>()
 const { t, locale } = useSupplierI18n()
 const search = ref(''), state = ref(''), supply = ref(''), overview = ref(true), columnsOpen = ref(false)
