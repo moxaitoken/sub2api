@@ -1,13 +1,28 @@
-# Cloudflare Flexible origin: HTTP only. TLS terminates at Cloudflare.
+# Website/portal: Cloudflare Flexible over HTTP 80. Direct API: HTTPS 443.
 # Cloudflare ranges verified on 2026-10-21: https://www.cloudflare.com/ips-v4
 # ECS security group also restricts TCP 80 to these ranges.
 {
 	admin 127.0.0.1:2019
-	auto_https off
+	auto_https disable_redirects
 	servers {
+		strict_sni_host on
 		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
 		trusted_proxies_strict
 		client_ip_headers CF-Connecting-IP
+	}
+}
+
+(direct_api_headers) {
+	# Direct clients cannot supply forwarding identities. Use the actual TCP peer.
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Real-IP {remote_host}
+	header_up CF-Connecting-IP {remote_host}
+	header_up X-Forwarded-Proto https
+	header_up X-Forwarded-Host {host}
+	header_up -Forwarded
+	header_up -True-Client-IP
+	transport http {
+		compression off
 	}
 }
 
@@ -57,6 +72,44 @@
 				header_up X-Forwarded-Host {host}
 				header_up -Forwarded
 				header_up -True-Client-IP
+			}
+		}
+		respond "Not Found" 404
+	}
+}
+
+# Direct model API: public HTTPS; existing website/portal HTTP routes stay unchanged.
+https://api.gomoai.ai {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	@model_api {
+		path_regexp model_api ^/(v1/)?(messages(/count_tokens)?|models(/[^/]+)?|responses(/compact)?|chat/completions|embeddings|images/(generations|edits)(/async)?|images/tasks/[^/]+|images/batches(/.*)?|videos(/.*)?|tts|stt|custom-voices(/.*)?|realtime|live(/[^/]+)?|web_search|x_search|alpha/search|contents/generations/tasks(/[^/]+)?)$
+	}
+	@gemini_api path /v1beta/models /v1beta/models/* /v1beta/cachedContents /v1beta/cachedContents/*
+	@codex_api path /backend-api/codex/responses /backend-api/codex/responses/compact /backend-api/codex/models /backend-api/codex/alpha/search /backend-api/codex/realtime/calls
+	@video_api path /v3/contents/generations/tasks /v3/contents/generations/tasks/* /api/v3/contents/generations/tasks /api/v3/contents/generations/tasks/*
+	route {
+		handle @model_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import direct_api_headers
+			}
+		}
+		handle @gemini_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import direct_api_headers
+			}
+		}
+		handle @codex_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import direct_api_headers
+			}
+		}
+		handle @video_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import direct_api_headers
 			}
 		}
 		respond "Not Found" 404

@@ -169,3 +169,27 @@ Caddy 启用前的环境与配置备份位于 ECS `/opt/sub2api/backups/ingress-
 供应商后端276通过事件、0跳过，门户121测试及类型/构建通过，主站i18n/类型/嵌入构建通过；未声称重跑主站完整单元套件。两库dump在无网络临时PG实际恢复，schema主库296/供应商13不变；Caddy、供应商环境配置hash保持。两服务健康、0重启、仅回环端口；公网HTTPS健康/页面200、管理员登录及4个供应商概览200、未认证401、初始静态资源200。未触发真实模型/OAuth/付款。
 
 服务器归档 `/opt/sub2api/releases/live-20261026-100501-1ad1889b5159`，备份 `before/`，回退入口 `ROLLBACK.sh`。可恢复两镜像/production.env，schema漂移时拒绝自动镜像回退；无数据库降级。环境副本实际恢复hash一致，未为测试回退生产。四角色及执行器同输入回归记录：`C:/Users/tirol/.codex/artifacts/sub2api-deploy/20261026-live-script`；旧执行器失败→修正通过→副本回滚恢复旧行为。
+
+
+## live-20261027-094251-b373e7219789
+
+用户修正 Boolean 默认值后，使用原版 `ops/deployment/live/live-release.ps1 -Environment live -Commit b373e7219789620ab815cab61ea31ce8734b5ba4 -Execute` 成功发布主站/供应商。脚本未修改、工作区干净、零源码overlay、未skip测试；仅进程内使用现有系统代理。管理员详情隐藏添加账号，供应商门户默认保留；未改变后端/schema/权限。
+
+供应商后端276通过事件/0跳过，门户124测试及类型/构建通过；主站i18n/类型/嵌入构建及管理员详情聚焦测试通过，未重跑主站完整后端套件。UI同输入旧错误默认值BASELINE失败exit1→修正MODIFIED通过exit0→源副本ROLLBACK失败exit1，恢复hash一致；记录在仓库外发布目录ui-verification。
+
+两库dump在无网络临时PG实际恢复，主296/供应商13不变。两镜像 revision精确匹配commit，healthy、0重启、仅回环端口；公网健康/页面200、8项静态资源与源站hash一致，管理员登录及4个供应商概览200、未认证401。Caddy和供应商环境hash不变，未触发真实模型/OAuth/付款。
+
+备份 `/opt/sub2api/releases/live-20261027-094251-b373e7219789/before`，回退入口同目录`ROLLBACK.sh`；仅环境副本实际执行恢复exit0/hash一致，未为测试回退生产、无DB降级，schema漂移拒绝镜像回退。四角色延伸记录在`C:/Users/tirol/.codex/artifacts/sub2api-deploy/20261026-live-script`。此前两次失败尝试保留，不覆盖旧记录。
+
+
+## api-direct-20261028-080727
+
+用户授权新增 `api.gomoai.ai` 的独立模型 API HTTPS 入口，不修改 Sub2API 核心代码、镜像、数据库或现有网站/门户路由。用户已新增 A 记录至现有 ECS，设置 DNS only，并在安全组新增 TCP 443 的 IPv4 全网访问；HTTP 80 仍限制 Cloudflare 网段，应用 8080/8091 保持回环监听。
+
+Caddy 仅为 API 子域名开启公开证书自动管理，固定 ACME TLS-ALPN（443）验证，不要求放开 80。`auto_https disable_redirects` 保持原网站 Flexible HTTP 回源不产生 HTTPS 重定向；严格 SNI/Host 检查避免混用主机名。新增入口仅匹配配置中的模型 API 路径；根页、管理员、登录及供应商管理接口拒绝访问。直连请求按 TCP peer 重建 XFF、X-Real-IP、CF-Connecting-IP，删除 Forwarded/True-Client-IP，不信任客户端提供的转发身份。
+
+灰云入口公开源站 IP，不享有 Cloudflare 代理的 WAF/隐藏源站能力；共享 ECS 的网络层攻击仍可能影响主站。现有网站的 Flexible 回源加密问题未在本次处理。原域名的 API 入口仍保留，客户端只有切换到新 API 地址才绕开 Cloudflare 的读取超时；上游模型慢及客户端自身超时不会因此自动解决。
+
+修改前配置与回退脚本：`/opt/sub2api/releases/api-direct-20261028-080727/BASELINE.Caddyfile`、同目录 `ROLLBACK.sh`。回退脚本接受目标配置文件，仅恢复配置字节；生产回退须先确认现场无后续变更，再运行脚本、`caddy validate`，最后 `systemctl reload caddy`。回滚副本已验证，不为测试回退生产；证书自动续期由 Caddy 负责，私钥不进入仓库或聊天。
+
+四角色及验收记录：`C:/Users/tirol/.codex/artifacts/sub2api-api-direct-20261028-080727/`。模型接口未认证返回 401，后台/管理路径返回 404；主站及门户公网页面/健康检查均为 200。无真实模型授权/调用与费用验收；客户端切换后仍须自行验证正常对话与流式输出。
