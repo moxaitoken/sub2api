@@ -51,7 +51,7 @@ ssh -N -L 127.0.0.1:18080:127.0.0.1:8080 root@ECS
 ## Caddy 入口与验证
 
 - Caddy 使用官方稳定版 APT 软件源，本次安装版本为 2.11.7；安装时先屏蔽服务自动启动，避免公开默认站点。
-- 仓库 `Caddyfile` 部署到 `/etc/caddy/Caddyfile`，监听 80，反代 `127.0.0.1:8080`。仅接受 `gomoai.ai`、`www.gomoai.ai`；未知 Host 返回 404，非 Cloudflare 来源返回 403。本机回环允许运维验证，但不信任其伪造的转发头。
+- 仓库 `Caddyfile` 部署到 `/etc/caddy/Caddyfile`，监听 80，反代 `127.0.0.1:8080`。仅接受 `gomoai.ai`、`www.gomoai.ai`；未知 Host 返回 404，非 Cloudflare 来源返回 403，但下文记录的 ALB 健康检查例外除外。本机回环允许运维验证，但不信任其伪造的转发头。
 - Cloudflare IPv4 网段于 2026-10-21 从官方列表核对；安全组与 Caddy 双重限制。域名当前仅配置 IPv4 源站；若启用 IPv6 源站，需同步审查两层规则。
 - Caddy 仅从可信 Cloudflare 来源解析 `CF-Connecting-IP`，严格解析并覆盖传给应用的 XFF、X-Real-IP、CF-Connecting-IP、转发协议和 Host；删除其他歧义身份头。不启用源站 HTTPS 跳转，避免 Flexible 重定向循环。
 - 原生 Caddy 访问 Docker 发布端口时，应用实际观察到宿主机桥接网关 `172.18.0.1`。运行环境 `SERVER_TRUSTED_PROXIES` 设为 `127.0.0.1/32,172.18.0.1/32`，不信任整个 Docker 子网。重建 Docker 网络时必须重新确认地址，不能盲目沿用。
@@ -193,3 +193,37 @@ Caddy 仅为 API 子域名开启公开证书自动管理，固定 ACME TLS-ALPN�
 修改前配置与回退脚本：`/opt/sub2api/releases/api-direct-20261028-080727/BASELINE.Caddyfile`、同目录 `ROLLBACK.sh`。回退脚本接受目标配置文件，仅恢复配置字节；生产回退须先确认现场无后续变更，再运行脚本、`caddy validate`，最后 `systemctl reload caddy`。回滚副本已验证，不为测试回退生产；证书自动续期由 Caddy 负责，私钥不进入仓库或聊天。
 
 四角色及验收记录：`C:/Users/tirol/.codex/artifacts/sub2api-api-direct-20261028-080727/`。模型接口未认证返回 401，后台/管理路径返回 404；主站及门户公网页面/健康检查均为 200。无真实模型授权/调用与费用验收；客户端切换后仍须自行验证正常对话与流式输出。
+
+## alb-health-20261028-113300
+
+用户授权修复新增 ALB 的后端健康检查，范围仅为 Caddy 健康探测，不切 DNS、不切业务流量。ECS 安全组由用户放行 B/C 交换机网段的 TCP 80；Caddy 在原 `@outside` 拒绝之前增加 `@alb_health`：只有 TCP 来源属于 `172.25.48.0/20` 或 `172.28.192.0/20`、Host 为 `gomoai.ai`、方法为 GET、路径恰为 `/health` 时，反代原后端 `127.0.0.1:8080`。返回真实后端健康响应，不以固定 200 掩盖后端故障。这两个网段内的其他工作负载也能探测这个健康地址，但不能因此访问业务/管理路径。
+
+原 Cloudflare 来源白名单、可信转发头、网站/供应商门户和直连 HTTPS 模型入口均保留。ALB 普通业务请求仍拒绝；当前不是 ALB 业务接入完成，主站 HTTP 80 监听、主站 Cloudflare 来源核验、灰云 API 白名单转发及真实 IP 链路需要后续独立验证后再切换。无应用代码、镜像、数据库或凭据变更，未执行真实模型调用。
+
+隔离网络命名空间运行原生 Caddy HTTP 路由及本地 mock 后端，BASELINE/MODIFIED/ROLLBACK 各 25 项用例通过；同输入 ALB GET `/health` 返回 403→200→403，修改后管理路径、错误 Host/方法/路径和非 ALB 来源仍为 403，Cloudflare 网站/门户及回环健康行为保留。回滚脚本只在修改副本实际执行，恢复 SHA256 与原件一致；补丁重建字节一致。首次校验因 `runuser` 无法读取 `/dev/stdin` 退出 1，已改为独占临时文件校验，原错误及后续通过结果保留在验证记录中；未为测试回滚生产。
+
+语法检查后热加载 Caddy，容器 ID 未变化。20 秒只保留方法/状态计数的生产观测发现两个可用区来源，420 个 GET 健康请求对应 420 个 HTTP 200；控制台最终健康状态仍待用户刷新确认。主站/供应商门户 HTTPS 为 200，现有 API 管理路径为 404、无凭据模型列表为 401。没有修改 DNS 或监听。
+
+原配置 SHA256：`a8318d8fe0d6b36452ec5fccd187583b1f5d45990686b98987565952181452d1`；修改后：`b9a17506bfd4f79f12bad8b51770265f8deb1636f6d458add9e58ed559c55b14`。服务器四角色位于 `/opt/sub2api/releases/alb-health-20261028-113300/`：`MODIFIED_FILE.Caddyfile`、`DIFF_FILE.patch`、`VERIFICATION.txt`、`ROLLBACK.sh`；另有原件 `BASELINE.Caddyfile` 和隔离测试脚本/输出。脚本接受一个目标副本路径，只恢复配置字节、不自动重载；生产回退须先核验现场未被后续修改，再恢复、校验并热加载。不得覆盖后续发布配置。
+
+### 同一事务续作：ALB 业务转发（2026-10-28）
+
+用户已在 ALB 为 HTTP 80、HTTPS 443 配置同一服务器组并确认健康正常，仅 HTTP 80 关联 `cloudflare-only` 非空白名单（15个官方 IPv4 网段），HTTPS 443 不关联该名单。用户授权继续 Caddy 业务转发及真实 IP 适配，仍不修改 DNS、监听、安全组、应用镜像/进程或数据库。
+
+Caddy 保留原 Cloudflare 直达网站/门户路径。新增 ALB→ECS:80 的业务准入：来源限两个既定交换机网段，主站 Host 仅在 ALB 写入 `X-Forwarded-Proto: http` 时允许，API Host 仅在其为 `https` 时进入共享模型白名单，其余 API 路径404。主站不能通过开放的 ALB 443 伪造 Host 绕过 HTTP 80 的 Cloudflare 白名单；ALB 必须继续覆盖写入监听协议头、追加实际 TCP peer 至 XFF，且 HTTP 80 白名单不得关闭或清空。交换机网段属于可信边界，其中其他工作负载同样具有网络层准入能力，不能把不可信工作负载放入这些网段后继续沿用该信任假设。
+
+`trusted_proxies` 仅增加这两个 ALB 网段，保留 strict 右向解析，使用 XFF 而非可由灰云客户端伪造的 CF-Connecting-IP 来推导身份；转发给应用的 XFF、X-Real-IP、CF-Connecting-IP 都重建为已解析身份，删除 Forwarded/True-Client-IP，并保持外部协议https。原直连443仍使用 TCP peer，不因共同信任配置改用客户端头。两个模型入口复用 `model_api_routes`，模型路径、后端认证、计费及流式协议不变。
+
+生产修改前 SHA256 为上述健康检查版本 `b9a17506bfd4f79f12bad8b51770265f8deb1636f6d458add9e58ed559c55b14`；业务版本为 `363fe4b5c12f2a7a60e50290717cd842fdb3405ad0bf1b27f8d642ccbce83086`。相同四角色继续使用，`HEALTH_*` 保存上一版配置/补丁/回滚脚本；`DIFF_FILE.patch` 为最初原件至最新配置的累计补丁，`BUSINESS_DIFF.patch` 为健康版本至业务版本补丁。`ROLLBACK.sh TARGET_COPY business` 恢复本次前健康版本，省略 business 则恢复整个事务最初原件；两种都在独立副本实际执行并比对hash，不能为测试回退生产。原验证账本追加保存，不覆盖早先结果。
+
+原生 Caddy 在无外网网络命名空间、mock后端验证业务修改前/修改后/本次回滚/事务最初回滚，各44例通过。模型路径403→401→403（401由mock认证端返回），健康探测在本次三阶段均200；主站经CF+ALB链路及供应商管理后端归属、真实IP和伪造头、原直连语义、错误Host/协议/路径均检查，模拟SSE完整通过，不执行真实模型调用。线上两个 ALB EIP 不改DNS指定地址验证模型列表401、管理员/供应商管理路径404、伪造主站Host403，即使客户端伪造XFP为http也无法绕过；非CF来源80均超时。现有主站、门户200，现有直连API未认证401、后台404，容器ID不变。
+
+尚未切换 Cloudflare 解析；主站 Cloudflare→ALB 的真实正向完整链路需要切换后立即验收，切换前仅隔离模拟验证该链路，不为测试临时解除白名单。后续切换应先保留原 A/CNAME 值与代理状态，使用 ALB DNS 名称而非固定单个EIP，主站橙云/API灰云逐项切换和验证，异常回退原解析。模型实际授权调用、真实SSE及账务本次未验收。ALB 证书到期前需签发并更新关联；切换后旧 ECS TLS-ALPN 续签可能不可达，不把旧证书自动续期当作长期回退保证。
+
+### 用户完成 DNS 切换后的验收（2026-10-28）
+
+用户在 Cloudflare 控制台将 `gomoai.ai` 和 `api.gomoai.ai` 从原 A `47.236.9.72` 改为 CNAME `alb-toxl2lpoa6gzibub5e.ap-southeast-1.alb.aliyuncsslbintl.com`，主站保持橙云、API保持灰云；`www` 继续 CNAME 到主站。操作者为用户，agent只读验收，没有代改DNS。主站回退值为原 A/橙云，API回退值为原 A/灰云；DNS传播及缓存使回退不保证瞬时生效，且长期回退仍需先确认旧直连证书有效。
+
+使用一次性唯一查询标记发起匿名、不计费探针：主站200、主站 `/api/v1/auth/me` 未认证401、www200、供应商门户200；API模型列表未认证401、管理路径404，API实际连接 ALB 公网IP而非旧ECS。主站响应为Cloudflare动态回源而非缓存命中。只提取本次探针的逐跳路由头，确认 Cloudflare→ALB私网来源→ECS:80→回环应用的真实路径：主站传入协议http，Caddy转给应用时为https，XFF链中保留的真实探针客户端被正确重建为 XFF/X-Real-IP，未把ALB或CF节点误认成用户。API经另一可用区ALB到达应用，后台路径没有转给应用。
+
+同目录 `DNS_CUTOVER_VERIFICATION.json` 保存六项实际结果及只属于本次匿名探针的路由证明；原始抓包、Cookie/授权头、无关客户请求和响应体不保留。`VERIFICATION.txt` 已追加本次证据并继续沿用原四角色，生产配置hash仍为业务版本，未重载/重启或增加配置变更。入口与鉴权链路已验收；真实授权模型调用、真实长时间SSE、消费及并发负载仍未验收。模型客户端须使用API子域名才能绕过Cloudflare代理读取超时，继续调用主站模型接口仍经过Cloudflare；ALB或上游自身超时并未因此无限延长。

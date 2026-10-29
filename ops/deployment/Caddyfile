@@ -1,14 +1,14 @@
 # Website/portal: Cloudflare Flexible over HTTP 80. Direct API: HTTPS 443.
 # Cloudflare ranges verified on 2026-10-21: https://www.cloudflare.com/ips-v4
-# ECS security group also restricts TCP 80 to these ranges.
+# ALB HTTP 80 requires a non-empty Cloudflare-only listener ACL; HTTPS 443 is API-only.
 {
 	admin 127.0.0.1:2019
 	auto_https disable_redirects
 	servers {
 		strict_sni_host on
-		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 172.25.48.0/20 172.28.192.0/20
 		trusted_proxies_strict
-		client_ip_headers CF-Connecting-IP
+		client_ip_headers X-Forwarded-For
 	}
 }
 
@@ -26,13 +26,86 @@
 	}
 }
 
+(alb_api_headers) {
+	# ALB appends the TCP peer; strict XFF parsing ignores client-supplied prefixes.
+	header_up X-Forwarded-For {client_ip}
+	header_up X-Real-IP {client_ip}
+	header_up CF-Connecting-IP {client_ip}
+	header_up X-Forwarded-Proto https
+	header_up X-Forwarded-Host {host}
+	header_up -Forwarded
+	header_up -True-Client-IP
+	transport http {
+		compression off
+	}
+}
+
+(model_api_routes) {
+	@model_api {
+		path_regexp model_api ^/(v1/)?(messages(/count_tokens)?|models(/[^/]+)?|responses(/compact)?|chat/completions|embeddings|images/(generations|edits)(/async)?|images/tasks/[^/]+|images/batches(/.*)?|videos(/.*)?|tts|stt|custom-voices(/.*)?|realtime|live(/[^/]+)?|web_search|x_search|alpha/search|contents/generations/tasks(/[^/]+)?)$
+	}
+	@gemini_api path /v1beta/models /v1beta/models/* /v1beta/cachedContents /v1beta/cachedContents/*
+	@codex_api path /backend-api/codex/responses /backend-api/codex/responses/compact /backend-api/codex/models /backend-api/codex/alpha/search /backend-api/codex/realtime/calls
+	@video_api path /v3/contents/generations/tasks /v3/contents/generations/tasks/* /api/v3/contents/generations/tasks /api/v3/contents/generations/tasks/*
+	route {
+		handle @model_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import {args[0]}
+			}
+		}
+		handle @gemini_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import {args[0]}
+			}
+		}
+		handle @codex_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import {args[0]}
+			}
+		}
+		handle @video_api {
+			reverse_proxy 127.0.0.1:8080 {
+				import {args[0]}
+			}
+		}
+		respond "Not Found" 404
+	}
+}
+
 :80 {
 	bind 0.0.0.0
-	@outside not remote_ip 127.0.0.1/32 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+	@outside {
+		not {
+			remote_ip 127.0.0.1/32 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+		}
+		not {
+			remote_ip 172.25.48.0/20 172.28.192.0/20
+			host gomoai.ai www.gomoai.ai
+			header X-Forwarded-Proto http
+		}
+	}
+	# ALB readiness is independent of frontend listener ACLs.
+	@alb_health {
+		remote_ip 172.25.48.0/20 172.28.192.0/20
+		host gomoai.ai
+		path /health
+		method GET
+	}
+	@alb_api {
+		remote_ip 172.25.48.0/20 172.28.192.0/20
+		host api.gomoai.ai
+		header X-Forwarded-Proto https
+	}
 	@site host gomoai.ai www.gomoai.ai
 	@portal host goccmax.com
 	@portal_www host www.goccmax.com
 	route {
+		handle @alb_health {
+			reverse_proxy 127.0.0.1:8080
+		}
+		handle @alb_api {
+			import model_api_routes alb_api_headers
+		}
 		respond @outside "Forbidden" 403
 		handle @site {
 			handle /api/supplier/admin/v1/* {
@@ -85,33 +158,5 @@ https://api.gomoai.ai {
 			disable_http_challenge
 		}
 	}
-	@model_api {
-		path_regexp model_api ^/(v1/)?(messages(/count_tokens)?|models(/[^/]+)?|responses(/compact)?|chat/completions|embeddings|images/(generations|edits)(/async)?|images/tasks/[^/]+|images/batches(/.*)?|videos(/.*)?|tts|stt|custom-voices(/.*)?|realtime|live(/[^/]+)?|web_search|x_search|alpha/search|contents/generations/tasks(/[^/]+)?)$
-	}
-	@gemini_api path /v1beta/models /v1beta/models/* /v1beta/cachedContents /v1beta/cachedContents/*
-	@codex_api path /backend-api/codex/responses /backend-api/codex/responses/compact /backend-api/codex/models /backend-api/codex/alpha/search /backend-api/codex/realtime/calls
-	@video_api path /v3/contents/generations/tasks /v3/contents/generations/tasks/* /api/v3/contents/generations/tasks /api/v3/contents/generations/tasks/*
-	route {
-		handle @model_api {
-			reverse_proxy 127.0.0.1:8080 {
-				import direct_api_headers
-			}
-		}
-		handle @gemini_api {
-			reverse_proxy 127.0.0.1:8080 {
-				import direct_api_headers
-			}
-		}
-		handle @codex_api {
-			reverse_proxy 127.0.0.1:8080 {
-				import direct_api_headers
-			}
-		}
-		handle @video_api {
-			reverse_proxy 127.0.0.1:8080 {
-				import direct_api_headers
-			}
-		}
-		respond "Not Found" 404
-	}
+	import model_api_routes direct_api_headers
 }
