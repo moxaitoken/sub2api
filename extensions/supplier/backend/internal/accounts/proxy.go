@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"github.com/moxaitoken/sub2api-supplier/internal/auth"
 	"github.com/moxaitoken/sub2api-supplier/internal/ports"
 	"net"
@@ -165,6 +166,10 @@ func (s *Service) Groups(ctx context.Context) ([]ports.AccountGroup, error) {
 				continue
 			}
 			g, err := up.AccountGroup(ctx, item.GroupID)
+			// Missing groups no longer participate in supplier admission.
+			if errors.Is(err, ports.ErrNotFound) {
+				continue
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -211,6 +216,9 @@ func (s *Service) Groups(ctx context.Context) ([]ports.AccountGroup, error) {
 	}
 	for _, id := range ids {
 		g, e := up.AccountGroup(ctx, id)
+		if errors.Is(e, ports.ErrNotFound) {
+			continue
+		}
 		if e != nil {
 			return nil, e
 		}

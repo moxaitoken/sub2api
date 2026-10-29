@@ -73,6 +73,7 @@ func TestR2LocalOnboarding(t *testing.T) {
 	generateCalls, exchangeCalls, createCalls := 0, 0, 0
 	failCreate, failEnable := false, false
 	failDelete, failProxyTest := false, false
+	groupDeleted := false
 	nextProxyID := int64(100)
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -117,7 +118,14 @@ func TestR2LocalOnboarding(t *testing.T) {
 		case r.URL.Path == "/api/v1/admin/groups/1/api-keys":
 			data = map[string]any{"items": []any{}, "total": 0}
 		case r.URL.Path == "/api/v1/admin/groups/2":
+			if groupDeleted {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			data = ports.AccountGroup{ID: 2, Name: "Configured fixture group", Platform: "anthropic", Status: "active"}
+		case r.URL.Path == "/api/v1/admin/groups/6":
+			w.WriteHeader(http.StatusNotFound)
+			return
 		case r.URL.Path == "/api/v1/admin/proxies" && r.Method == "POST":
 			var in struct {
 				ports.ProxyConfig
@@ -668,5 +676,44 @@ func TestR2LocalOnboarding(t *testing.T) {
 	if createCalls != beforeCreates {
 		t.Fatal("activation failure replayed creation")
 	}
-	t.Log("R2 onboarding: real PG + local identity + synthetic upstream: proxy/CSRF/ownership/capacity/idempotency/state/atomic paused creation then automatic enabling/uncertain outcome verified; no live Claude traffic")
+	// A stale enabled mapping must not break options or hide the supplier's proxies.
+	if _, e = store.SetGroupAccess(ctx, ports.GroupAccess{GroupID: 6, Enabled: true, SupplierGroupName: "Deleted fixture"}, 42); e != nil {
+		t.Fatal(e)
+	}
+	data = want(call("GET", "/api/supplier/v1/onboarding/options", nil, c2, "", ""), 200)
+	var optionGroups []ports.AccountGroup
+	var optionProxies []ports.OwnProxy
+	if e = json.Unmarshal(data["groups"], &optionGroups); e != nil || len(optionGroups) != 1 || optionGroups[0].ID != 2 {
+		t.Fatal("stale mapping broke options", string(data["groups"]), e)
+	}
+	if e = json.Unmarshal(data["proxies"], &optionProxies); e != nil || len(optionProxies) == 0 {
+		t.Fatal("options lost owned proxies", e)
+	}
+	// Deletion after issuing an authorization must block exchange/create/enable.
+	failEnable = false
+	data = want(call("POST", "/api/supplier/v1/proxies", ports.ProxyInput{Name: "Group deletion fixture", Address: "8.8.4.4:8080", Region: "SG"}, c2, csrf2, key()), 201)
+	var groupProxy, groupOAuth string
+	json.Unmarshal(data["id"], &groupProxy)
+	data = want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{ProxyID: groupProxy, GroupID: 2}, c2, csrf2, key()), 201)
+	json.Unmarshal(data["id"], &groupOAuth)
+	mu.Lock()
+	groupDeleted = true
+	mu.Unlock()
+	data = want(call("GET", "/api/supplier/v1/onboarding/options", nil, c2, "", ""), 200)
+	if string(data["groups"]) != "[]" {
+		t.Fatal("all deleted groups must return an empty array", string(data["groups"]))
+	}
+	beforeExchange, beforeCreate, beforeGenerate := exchangeCalls, createCalls, generateCalls
+	want(call("POST", "/api/supplier/v1/oauth/sessions", ports.BeginOnboarding{ProxyID: groupProxy, GroupID: 2}, c2, csrf2, key()), 403)
+	data = want(call("POST", "/api/supplier/v1/oauth/sessions/"+groupOAuth+"/complete", completeBody, c2, csrf2, key()), 202)
+	if string(data["state"]) != `"failed"` || string(data["step"]) != `"group_rejected"` {
+		t.Fatal("deleted group authorization not rejected", string(data["state"]), string(data["step"]))
+	}
+	if exchangeCalls != beforeExchange || createCalls != beforeCreate || generateCalls != beforeGenerate {
+		t.Fatal("deleted group allowed an external OAuth/account operation")
+	}
+	if policy, e := store.GroupAccess(ctx, 6); e != nil || !policy.Enabled {
+		t.Fatal("read mutated the historical mapping", policy, e)
+	}
+	t.Log("R2 onboarding: real PG + local identity + synthetic upstream: proxy/CSRF/ownership/capacity/idempotency/state/atomic paused creation then automatic enabling/uncertain outcome/deleted group options and authorization fencing verified; no live Claude traffic")
 }
