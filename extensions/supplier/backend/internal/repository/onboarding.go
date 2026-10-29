@@ -194,6 +194,7 @@ func scanOnboarding(row scanner) (ports.BoundOAuth, error) {
 	e := row.Scan(&o.ID, &o.SupplierID, &o.Name, &o.StateHash, &o.KeyID, &o.Status, &o.Cipher, &o.ExpiresAt, &o.GroupID, pq.Array(&o.GroupIDs), &rawSettings, &o.CredentialVersion, &o.SessionEpoch, &o.BeginKey, &o.RequestHash, &o.CreatedAccountID, &o.Proxy.Version, &o.Proxy.ID, &o.Proxy.Name, &o.Proxy.Address, &o.Proxy.Region, &o.Proxy.Status, &o.Proxy.Capacity, &o.Proxy.UpstreamID, &o.Proxy.ConfigHash)
 	if e == nil {
 		o.Settings = ports.DefaultAccountSettings()
+		o.Settings.Concurrency = 100
 		// Pre-013 authorizations used sessions=100 but no RPM limit. Preserve
 		// their frozen behavior instead of applying the new form defaults.
 		zeroRPM := 0

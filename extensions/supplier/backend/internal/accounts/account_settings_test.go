@@ -10,7 +10,11 @@ import (
 
 func TestAccountSettingsDefaultsAndOverrides(t *testing.T) {
 	for _, tc := range []struct{ name, input, want string }{
-		{"omitted", `{}`, `{"concurrency":100,"max_sessions":100,"session_idle_timeout_minutes":5,"base_rpm":15,"rpm_strategy":"tiered"}`},
+		{"omitted", `{}`, `{"concurrency":20,"max_sessions":100,"session_idle_timeout_minutes":5,"base_rpm":100,"rpm_strategy":"tiered"}`},
+		{"only concurrency", `{"concurrency":7}`, `{"concurrency":7,"max_sessions":100,"session_idle_timeout_minutes":5,"base_rpm":100,"rpm_strategy":"tiered"}`},
+		{"only sessions", `{"max_sessions":25}`, `{"concurrency":20,"max_sessions":25,"session_idle_timeout_minutes":5,"base_rpm":100,"rpm_strategy":"tiered"}`},
+		{"only rpm", `{"base_rpm":50}`, `{"concurrency":20,"max_sessions":100,"session_idle_timeout_minutes":5,"base_rpm":50,"rpm_strategy":"tiered"}`},
+		{"disabled with omitted concurrency", `{"max_sessions":0,"base_rpm":0}`, `{"concurrency":20,"max_sessions":0,"session_idle_timeout_minutes":5,"base_rpm":0,"rpm_strategy":"tiered"}`},
 		{"custom above defaults", `{"concurrency":120,"max_sessions":150,"session_idle_timeout_minutes":8,"base_rpm":23,"rpm_strategy":"sticky_exempt","window_cost_limit":12.34,"window_cost_sticky_reserve":0}`, `{"concurrency":120,"max_sessions":150,"session_idle_timeout_minutes":8,"base_rpm":23,"rpm_strategy":"sticky_exempt","window_cost_limit":12.34,"window_cost_sticky_reserve":0}`},
 		{"disabled", `{"concurrency":7,"max_sessions":0,"base_rpm":0}`, `{"concurrency":7,"max_sessions":0,"session_idle_timeout_minutes":5,"base_rpm":0,"rpm_strategy":"tiered"}`},
 	} {

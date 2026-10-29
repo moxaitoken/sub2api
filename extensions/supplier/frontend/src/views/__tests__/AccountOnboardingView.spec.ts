@@ -44,7 +44,7 @@ describe('manual supplier account onboarding',()=>{
   const {wrapper:w,fetcher:f}=await view([ok(authorization),ok({id:'operation-fixture',action:'oauth.complete',state:'succeeded',step:'created_paused',account_id:'account-fixture'})])
   await w.findAll('select')[1].setValue(proxy.id)
   await w.findAll('button').find(b=>b.text()==='Generate authorization link')!.trigger('click');await flushPromises()
-  expect(JSON.parse(String(f.mock.calls[2][1]?.body))).toEqual({name:'',proxy_id:proxy.id,group_ids:[2],settings:{concurrency:100,max_sessions:100,session_idle_timeout_minutes:5,base_rpm:15,rpm_strategy:'tiered'}})
+  expect(JSON.parse(String(f.mock.calls[2][1]?.body))).toEqual({name:'',proxy_id:proxy.id,group_ids:[2],settings:{concurrency:20,max_sessions:100,session_idle_timeout_minutes:5,base_rpm:100,rpm_strategy:'tiered'}})
   expect(new Headers(f.mock.calls[2][1]?.headers).get('Idempotency-Key')).toBeTruthy()
   expect(w.get('a').attributes('href')).toBe(authorization.authorization_url)
   expect(w.get('a').attributes('rel')).toBe('noopener noreferrer')
@@ -155,7 +155,8 @@ describe('supplier-selected account settings and group picker', () => {
  }
  it('shows editable defaults and submits values above 100 unchanged', async () => {
   const {wrapper:w,fetcher:f} = await editable()
-  for (const [id,value] of [['account-concurrency','100'],['max-sessions','100'],['session-idle','5'],['base-rpm','15']]) {
+  expect(w.text()).toContain('Defaults: concurrency 20, sessions 100, idle timeout 5 minutes, RPM 100.')
+  for (const [id,value] of [['account-concurrency','20'],['max-sessions','100'],['session-idle','5'],['base-rpm','100']]) {
     expect((w.get(`[data-testid="${id}"]`).element as HTMLInputElement).value).toBe(value)
   }
   await w.get('[data-testid="account-concurrency"]').setValue('120')
@@ -174,7 +175,7 @@ describe('supplier-selected account settings and group picker', () => {
  })
  it('restores blank fields to visible defaults and distinguishes disabled limits', async () => {
   const {wrapper:w,fetcher:f} = await editable()
-  for (const [id,value] of [['account-concurrency','100'],['max-sessions','100'],['session-idle','5'],['base-rpm','15']]) {
+  for (const [id,value] of [['account-concurrency','20'],['max-sessions','100'],['session-idle','5'],['base-rpm','100']]) {
     const input=w.get(`[data-testid="${id}"]`)
     await input.setValue('');await input.trigger('blur')
     expect((input.element as HTMLInputElement).value).toBe(value)
@@ -182,7 +183,14 @@ describe('supplier-selected account settings and group picker', () => {
   await w.get('[data-testid="session-limit-enabled"]').setValue(false)
   await w.get('[data-testid="rpm-limit-enabled"]').setValue(false)
   await w.findAll('button').find(b => b.text() === 'Generate authorization link')!.trigger('click');await flushPromises()
-  expect(JSON.parse(String(f.mock.calls[2][1]?.body)).settings).toEqual({concurrency:100,max_sessions:0,base_rpm:0})
+  expect(JSON.parse(String(f.mock.calls[2][1]?.body)).settings).toEqual({concurrency:20,max_sessions:0,base_rpm:0})
+  w.unmount()
+ })
+ it('submits new defaults for blank enabled fields even before blur', async () => {
+  const {wrapper:w,fetcher:f} = await editable()
+  for (const id of ['account-concurrency','max-sessions','base-rpm']) await w.get(`[data-testid="${id}"]`).setValue('')
+  await w.findAll('button').find(b=>b.text()==='Generate authorization link')!.trigger('click');await flushPromises()
+  expect(JSON.parse(String(f.mock.calls[2][1]?.body)).settings).toEqual({concurrency:20,max_sessions:100,session_idle_timeout_minutes:5,base_rpm:100,rpm_strategy:'tiered'})
   w.unmount()
  })
  it('rejects invalid values without silently clamping them or starting OAuth', async () => {
@@ -193,7 +201,7 @@ describe('supplier-selected account settings and group picker', () => {
     await input.setValue(value)
     expect(generate.attributes('disabled')).toBeDefined()
     expect((input.element as HTMLInputElement).value).toBe(value)
-    await input.setValue(id==='base-rpm' ? '15' : '100')
+    await input.setValue(id==='base-rpm' ? '100' : id==='account-concurrency' ? '20' : '100')
   }
   await w.get('[data-testid="window-cost-enabled"]').setValue(true)
   expect(generate.attributes('disabled')).toBeDefined()

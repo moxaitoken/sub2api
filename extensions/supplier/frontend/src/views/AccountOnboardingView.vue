@@ -11,7 +11,7 @@ const emit = defineEmits<{ close: []; created: [] }>()
 const { t } = useSupplierI18n()
 const options = ref<OnboardingOptions>({ groups: [], proxies: [] }), loading = ref(true), busy = ref(false), error = ref<unknown>(null), groupOpen = ref(false)
 const name = ref(''), selectedGroupKeys = ref<number[]>([]), source = ref('existing'), proxyID = ref(''), code = ref(''), advanced = ref(false)
-const settings = ref({ concurrency: 100, windowCostEnabled: false, windowCostLimit: null as number | null, windowCostStickyReserve: 10, sessionLimitEnabled: true, maxSessions: 100, sessionIdleTimeout: 5, rpmLimitEnabled: true, baseRpm: 15, rpmStrategy: 'tiered' as 'tiered' | 'sticky_exempt', rpmStickyBuffer: null as number | null })
+const settings = ref({ concurrency: 20, windowCostEnabled: false, windowCostLimit: null as number | null, windowCostStickyReserve: 10, sessionLimitEnabled: true, maxSessions: 100, sessionIdleTimeout: 5, rpmLimitEnabled: true, baseRpm: 100, rpmStrategy: 'tiered' as 'tiered' | 'sticky_exempt', rpmStickyBuffer: null as number | null })
 const authorization = ref<Authorization | null>(null), operation = ref<AccountOperation | null>(null), submitted = ref(false)
 const authorizationUrlInput = ref<HTMLTextAreaElement | null>(null)
 const groupPicker = ref<HTMLElement | null>(null)
@@ -34,7 +34,7 @@ const selectedGroupNames = computed(() => groupOptions.value.filter(item => sele
 const withDefault = (value: unknown, fallback: number) => value === '' || value == null ? fallback : Number(value)
 const accountSettings = computed<AccountSettings>(() => {
   const current = settings.value
-  const output: AccountSettings = { concurrency: withDefault(current.concurrency, 100), max_sessions: 0, base_rpm: 0 }
+  const output: AccountSettings = { concurrency: withDefault(current.concurrency, 20), max_sessions: 0, base_rpm: 0 }
   if (current.windowCostEnabled) {
     output.window_cost_limit = withDefault(current.windowCostLimit, 0)
     output.window_cost_sticky_reserve = withDefault(current.windowCostStickyReserve, 10)
@@ -44,7 +44,7 @@ const accountSettings = computed<AccountSettings>(() => {
     output.session_idle_timeout_minutes = withDefault(current.sessionIdleTimeout, 5)
   }
   if (current.rpmLimitEnabled) {
-    output.base_rpm = withDefault(current.baseRpm, 15)
+    output.base_rpm = withDefault(current.baseRpm, 100)
     output.rpm_strategy = current.rpmStrategy
     if (current.rpmStrategy === 'tiered' && current.rpmStickyBuffer != null && String(current.rpmStickyBuffer) !== '') output.rpm_sticky_buffer = Number(current.rpmStickyBuffer)
   }
@@ -166,7 +166,7 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = ''; document
         <p class="onboarding-hint">{{ t('onboarding.defaultsHint') }}</p>
         <div v-if="advanced" class="advanced-settings">
           <label>{{ t('accounts.name') }}<input v-model="name" maxlength="100" :placeholder="t('onboarding.nameHint')" :disabled="busy" /></label>
-          <label>{{ t('onboarding.concurrency') }}<input v-model.number="settings.concurrency" data-testid="account-concurrency" type="number" min="1" step="1" :disabled="busy" @blur="settings.concurrency = withDefault(settings.concurrency, 100)" /></label>
+          <label>{{ t('onboarding.concurrency') }}<input v-model.number="settings.concurrency" data-testid="account-concurrency" type="number" min="1" step="1" :disabled="busy" @blur="settings.concurrency = withDefault(settings.concurrency, 20)" /></label>
           <div class="setting-card">
             <label class="setting-heading"><span>{{ t('onboarding.sessionLimit') }}</span><input v-model="settings.sessionLimitEnabled" data-testid="session-limit-enabled" type="checkbox" :disabled="busy" /></label>
             <div v-if="settings.sessionLimitEnabled" class="setting-grid">
@@ -177,7 +177,7 @@ onUnmounted(() => { alive = false; clearTimeout(poll); code.value = ''; document
           <div class="setting-card">
             <label class="setting-heading"><span>{{ t('onboarding.rpmLimit') }}</span><input v-model="settings.rpmLimitEnabled" data-testid="rpm-limit-enabled" type="checkbox" :disabled="busy" /></label>
             <div v-if="settings.rpmLimitEnabled" class="setting-grid">
-              <label>{{ t('onboarding.baseRpm') }}<input v-model.number="settings.baseRpm" data-testid="base-rpm" type="number" min="1" max="10000" step="1" :disabled="busy" @blur="settings.baseRpm = withDefault(settings.baseRpm, 15)" /></label>
+              <label>{{ t('onboarding.baseRpm') }}<input v-model.number="settings.baseRpm" data-testid="base-rpm" type="number" min="1" max="10000" step="1" :disabled="busy" @blur="settings.baseRpm = withDefault(settings.baseRpm, 100)" /></label>
               <label>{{ t('onboarding.rpmStrategy') }}<select v-model="settings.rpmStrategy" data-testid="rpm-strategy" :disabled="busy"><option value="tiered">{{ t('onboarding.rpmTiered') }}</option><option value="sticky_exempt">{{ t('onboarding.rpmStickyExempt') }}</option></select></label>
               <label v-if="settings.rpmStrategy === 'tiered'">{{ t('onboarding.rpmBuffer') }}<input v-model.number="settings.rpmStickyBuffer" data-testid="rpm-buffer" type="number" min="1" step="1" :placeholder="t('onboarding.rpmBufferAuto')" :disabled="busy" /></label>
             </div>

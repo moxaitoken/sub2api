@@ -110,7 +110,8 @@ func (c *AccountClient) CheckClaudeIdentity(ctx context.Context, identity string
 
 func (c *AccountClient) CreateClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64) (ports.RemoteAccount, error) {
 	settings := ports.DefaultAccountSettings()
-	settings.BaseRPM = nil // Keep the retired legacy authorization path unchanged.
+	settings.Concurrency = 100 // Preserve the retired legacy authorization defaults.
+	settings.BaseRPM = nil     // Keep the retired legacy authorization path unchanged.
 	return c.createClaudeAccount(ctx, name, key, tokens, group, nil, settings)
 }
 func (c *AccountClient) createClaudeAccount(ctx context.Context, name, key string, tokens ports.ClaudeTokens, group int64, proxy *int64, settings ports.AccountSettings) (ports.RemoteAccount, error) {

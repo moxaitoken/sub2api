@@ -35,7 +35,7 @@ export default {
   "groupMultiHint": "Select multiple groups; identical supplier group names are merged and the account joins every matching upstream group.",
   "noGroup": "No onboarding group configured by platform",
   "chooseGroups": "Choose groups",
-  "defaultsHint": "Defaults: concurrency 100, sessions 100, idle timeout 5 minutes, RPM 15. Expand advanced settings to customize.",
+  "defaultsHint": "Defaults: concurrency 20, sessions 100, idle timeout 5 minutes, RPM 100. Expand advanced settings to customize.",
   "rpmBuffer": "Sticky buffer (requests)",
   "rpmBufferAuto": "Automatic when blank",
   "invalidSettings": "Check settings: concurrency, sessions and timeout must be positive integers, RPM 1–10000. Enabled cost control requires a positive limit.",

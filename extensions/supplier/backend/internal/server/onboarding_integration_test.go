@@ -631,6 +631,17 @@ func TestR2LocalOnboarding(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	if bound.Settings.Concurrency != 20 || *bound.Settings.MaxSessions != 100 || *bound.Settings.BaseRPM != 100 {
+		t.Fatal("omitted settings did not freeze the new defaults", bound.Settings)
+	}
+	// Existing explicit snapshots retain their original defaults after upgrade.
+	if _, e = db.Exec(`UPDATE supplier.supplier_oauth_sessions SET account_settings='{"concurrency":100,"max_sessions":100,"session_idle_timeout_minutes":5,"base_rpm":15,"rpm_strategy":"tiered"}'::jsonb WHERE id=$1`, resetBound); e != nil {
+		t.Fatal(e)
+	}
+	previous, e := store.Onboarding(ctx, first.ID, resetBound)
+	if e != nil || previous.Settings.Concurrency != 100 || *previous.Settings.MaxSessions != 100 || *previous.Settings.BaseRPM != 15 {
+		t.Fatal("existing authorization snapshot changed", previous.Settings, e)
+	}
 	// An authorization created before migration 013 has an empty settings
 	// snapshot. Its previous limits must not change after upgrading.
 	if _, e = db.Exec(`UPDATE supplier.supplier_oauth_sessions SET account_settings='{}'::jsonb WHERE id=$1`, resetBound); e != nil {

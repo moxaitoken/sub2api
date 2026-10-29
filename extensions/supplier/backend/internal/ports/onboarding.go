@@ -70,8 +70,8 @@ type AccountSettings struct {
 }
 
 func DefaultAccountSettings() AccountSettings {
-	maxSessions, idle, rpm := 100, 5, 15
-	return AccountSettings{Concurrency: 100, MaxSessions: &maxSessions, SessionIdleTimeoutMinutes: &idle, BaseRPM: &rpm, RPMStrategy: "tiered"}
+	maxSessions, idle, rpm := 100, 5, 100
+	return AccountSettings{Concurrency: 20, MaxSessions: &maxSessions, SessionIdleTimeoutMinutes: &idle, BaseRPM: &rpm, RPMStrategy: "tiered"}
 }
 
 type BeginOnboarding struct {
