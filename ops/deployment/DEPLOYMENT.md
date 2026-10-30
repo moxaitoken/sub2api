@@ -227,3 +227,21 @@ Caddy 保留原 Cloudflare 直达网站/门户路径。新增 ALB→ECS:80 的�
 使用一次性唯一查询标记发起匿名、不计费探针：主站200、主站 `/api/v1/auth/me` 未认证401、www200、供应商门户200；API模型列表未认证401、管理路径404，API实际连接 ALB 公网IP而非旧ECS。主站响应为Cloudflare动态回源而非缓存命中。只提取本次探针的逐跳路由头，确认 Cloudflare→ALB私网来源→ECS:80→回环应用的真实路径：主站传入协议http，Caddy转给应用时为https，XFF链中保留的真实探针客户端被正确重建为 XFF/X-Real-IP，未把ALB或CF节点误认成用户。API经另一可用区ALB到达应用，后台路径没有转给应用。
 
 同目录 `DNS_CUTOVER_VERIFICATION.json` 保存六项实际结果及只属于本次匿名探针的路由证明；原始抓包、Cookie/授权头、无关客户请求和响应体不保留。`VERIFICATION.txt` 已追加本次证据并继续沿用原四角色，生产配置hash仍为业务版本，未重载/重启或增加配置变更。入口与鉴权链路已验收；真实授权模型调用、真实长时间SSE、消费及并发负载仍未验收。模型客户端须使用API子域名才能绕过Cloudflare代理读取超时，继续调用主站模型接口仍经过Cloudflare；ALB或上游自身超时并未因此无限延长。
+
+
+## live-20261029-092123-c1e85f20d250
+
+用户授权用原版 live-release.ps1 发布干净提交 `c1e85f20d25020b2f6b87f00af9176feae1bc6b5` 至既定 ECS live，两组件镜像均已切换，脚本未修改、零overlay、无skip、无迁移。供应商 Groups 忽略已删除主站分组的404，其他错误继续返回；本次未编辑业务源码。原 Cloudflare→ALB/Caddy 和 API 灰云入口保持不变。
+
+发布安全6测试、供应商后端284通过事件/0跳过、门户124测试、主站i18n3测试及两套类型/嵌入构建通过；两库dump在无网络PG实际恢复，schema主296/供应商13不变。两容器精确revision、healthy、0重启、仅回环端口。主站/门户健康和页面200、8项公网静态资源hash匹配；管理员登录/供应商列表及4概览200、未认证401；API模型未认证401、后台404。未跑主站完整后端套件或真实模型/OAuth/付款。
+
+备份 `/opt/sub2api/releases/live-20261029-092123-c1e85f20d250/before`，回退入口同目录 `ROLLBACK.sh`。环境副本实际恢复exit0/hash一致，未为测试回退生产或降级DB。持久四角色沿用 `C:/Users/tirol/.codex/artifacts/sub2api-deploy/20261026-live-script`；同输入源码探针BASELINE exit1→MODIFIED exit0→ROLLBACK exit1，恢复hash一致。新发布完整记录在仓库外同名sub2api-live-releases目录。无commit/push。
+
+
+## live-20261029-095457-79505865500a
+
+用户授权使用原版 live-release.ps1 发布固定提交 `79505865500acff2e971dcd606f40b63549909f0` 至既定ECS live主站/供应商；原有未提交部署记录保留，零源码overlay、未改脚本、无skip/迁移。新发起的供应商接入默认并发20/RPM100，前后端及留空兜底一致；已有账号/授权参数快照不改写，旧空快照及旧路径保留原行为。未修改全局主站默认值、DNS/ALB/Caddy/权限/依赖。
+
+发布安全6项、供应商后端292通过事件/0跳过、门户125测试及两套类型/嵌入构建通过。两库dump实际隔离无网络恢复，schema主296/供应商13不变。两容器精确revision、healthy0重启、仅回环端口；公网健康/页面200、8静态资源hash匹配；管理员登录/列表/4概览200、未认证401；API模型401/后台404。未跑主站完整后端套件或真实模型/OAuth/付款。
+
+备份 `/opt/sub2api/releases/live-20261029-095457-79505865500a/before`，回退入口同目录ROLLBACK.sh；环境副本实际恢复exit0/hash一致，未回退生产/降级DB。沿用原持久四角色，探针BASELINE exit1→MODIFIED exit0→ROLLBACK exit1、恢复hash一致，补充记录在仓库外同名发布目录；无commit/push，项目地图/开发约定不变。
